@@ -84,6 +84,9 @@
     "urlpattern-polyfill": "^10.1.0",
     "yargs": "18.0.0"
   },
+  "optionalDependencies": {
+    "webdriverio": "^9.0.0"
+  },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=23"
   }
