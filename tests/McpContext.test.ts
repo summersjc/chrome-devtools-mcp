@@ -213,4 +213,31 @@ describe('McpContext', () => {
       fromStub.restore();
     });
   });
+
+  describe('automation driver', () => {
+    it('defaults to puppeteer', async () => {
+      await withMcpContext(async (_response, context) => {
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
+        assert.strictEqual(context.getAutomationDriver().name, 'puppeteer');
+      });
+    });
+
+    it('selecting puppeteer is a no-op', async () => {
+      await withMcpContext(async (_response, context) => {
+        await context.selectAutomationDriver('puppeteer');
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
+      });
+    });
+
+    it('selecting wdio on a pipe-connected browser fails with guidance', async () => {
+      await withMcpContext(async (_response, context) => {
+        await assert.rejects(
+          context.selectAutomationDriver('wdio'),
+          /no TCP debugging endpoint/,
+        );
+        // The failed switch must not change the active driver.
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
+      });
+    });
+  });
 });

@@ -5,6 +5,10 @@
  */
 
 import type {ParsedArguments} from '../bin/chrome-devtools-mcp-cli-options.js';
+import type {
+  AutomationDriver,
+  AutomationDriverName,
+} from '../drivers/AutomationDriver.js';
 import type {AggregatedInfoWithUid} from '../HeapSnapshotManager.js';
 import type {McpPage} from '../McpPage.js';
 import {zod} from '../third_party/index.js';
@@ -170,6 +174,9 @@ export type SupportedExtensions =
  * Only add methods required by tools/*.
  */
 export type Context = Readonly<{
+  getAutomationDriver(): AutomationDriver;
+  getAutomationDriverName(): AutomationDriverName;
+  selectAutomationDriver(name: AutomationDriverName): Promise<void>;
   isRunningPerformanceTrace(): boolean;
   setIsRunningPerformanceTrace(x: boolean): void;
   isCruxEnabled(): boolean;

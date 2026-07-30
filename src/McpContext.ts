@@ -9,6 +9,12 @@ import path from 'node:path';
 
 import type {TargetUniverse} from './DevtoolsUtils.js';
 import {UniverseManager} from './DevtoolsUtils.js';
+import type {
+  AutomationDriver,
+  AutomationDriverName,
+} from './drivers/AutomationDriver.js';
+import {PuppeteerDriver} from './drivers/PuppeteerDriver.js';
+import {WdioDriver} from './drivers/WdioDriver.js';
 import {HeapSnapshotManager} from './HeapSnapshotManager.js';
 import type {AggregatedInfoWithUid} from './HeapSnapshotManager.js';
 import {McpPage} from './McpPage.js';
@@ -52,6 +58,8 @@ interface McpContextOptions {
   experimentalIncludeAllPages?: boolean;
   // Whether CrUX data should be fetched.
   performanceCrux: boolean;
+  // The driver used for user-visible actions. Defaults to 'puppeteer'.
+  automationDriver?: AutomationDriverName;
 }
 
 const DEFAULT_TIMEOUT = 5_000;
@@ -91,6 +99,10 @@ export class McpContext implements Context {
   #options: McpContextOptions;
   #heapSnapshotManager = new HeapSnapshotManager();
 
+  #automationDriverName: AutomationDriverName = 'puppeteer';
+  #puppeteerDriver = new PuppeteerDriver();
+  #wdioDriver?: WdioDriver;
+
   private constructor(
     browser: Browser,
     logger: Debugger,
@@ -101,6 +113,7 @@ export class McpContext implements Context {
     this.logger = logger;
     this.#locatorClass = locatorClass;
     this.#options = options;
+    this.#automationDriverName = options.automationDriver ?? 'puppeteer';
 
     this.#networkCollector = new NetworkCollector(this.browser);
 
@@ -128,7 +141,36 @@ export class McpContext implements Context {
     await this.#devtoolsUniverseManager.init(pages);
   }
 
+  getAutomationDriver(): AutomationDriver {
+    if (this.#automationDriverName === 'wdio') {
+      return this.#getWdioDriver();
+    }
+    return this.#puppeteerDriver;
+  }
+
+  getAutomationDriverName(): AutomationDriverName {
+    return this.#automationDriverName;
+  }
+
+  async selectAutomationDriver(name: AutomationDriverName): Promise<void> {
+    if (name === 'wdio') {
+      // Attach eagerly so configuration problems surface at switch time
+      // instead of on the first action.
+      await this.#getWdioDriver().ensureSession();
+    }
+    this.#automationDriverName = name;
+  }
+
+  #getWdioDriver(): WdioDriver {
+    if (!this.#wdioDriver) {
+      this.#wdioDriver = new WdioDriver(this.browser);
+    }
+    return this.#wdioDriver;
+  }
+
   dispose() {
+    void this.#wdioDriver?.dispose();
+    this.#wdioDriver = undefined;
     this.#networkCollector.dispose();
     this.#consoleCollector.dispose();
     this.#devtoolsUniverseManager.dispose();
