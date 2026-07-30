@@ -257,10 +257,7 @@ export class WdioDriver implements AutomationDriver {
     });
   }
 
-  async goForward(
-    page: ContextPage,
-    options?: NavigateOptions,
-  ): Promise<void> {
+  async goForward(page: ContextPage, options?: NavigateOptions): Promise<void> {
     await this.#run(async session => {
       await this.#switchToPage(session, page);
       await session.setTimeout({

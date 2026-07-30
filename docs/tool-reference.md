@@ -1,6 +1,6 @@
 <!-- AUTO GENERATED DO NOT EDIT - run 'npm run gen' to update-->
 
-# Chrome DevTools MCP Tool Reference (~7005 cl100k_base tokens)
+# Chrome DevTools MCP Tool Reference (~7265 cl100k_base tokens)
 
 - **[Input automation](#input-automation)** (9 tools)
   - [`click`](#click)
@@ -12,11 +12,12 @@
   - [`press_key`](#press_key)
   - [`type_text`](#type_text)
   - [`upload_file`](#upload_file)
-- **[Navigation automation](#navigation-automation)** (6 tools)
+- **[Navigation automation](#navigation-automation)** (7 tools)
   - [`close_page`](#close_page)
   - [`list_pages`](#list_pages)
   - [`navigate_page`](#navigate_page)
   - [`new_page`](#new_page)
+  - [`select_automation_driver`](#select_automation_driver)
   - [`select_page`](#select_page)
   - [`wait_for`](#wait_for)
 - **[Emulation](#emulation)** (2 tools)
@@ -195,6 +196,16 @@
 - **background** (boolean) _(optional)_: Whether to open the page in the background without bringing it to the front. Default is false (foreground).
 - **isolatedContext** (string) _(optional)_: If specified, the page is created in an isolated browser context with the given name. Pages in the same browser context share cookies and storage. Pages in different browser contexts are fully isolated.
 - **timeout** (integer) _(optional)_: Maximum wait time in milliseconds. If set to 0, the default timeout will be used.
+
+---
+
+### `select_automation_driver`
+
+**Description:** Selects the automation driver used for user-visible actions ([`click`](#click), [`fill`](#fill), navigate, keys). "puppeteer" (default) performs actions via Puppeteer. "wdio" performs actions via WebdriverIO attached to the same browser; it requires the optional "webdriverio" dependency and a browser with a TCP debugging endpoint (start the server with --automation-driver wdio or --browser-url). Diagnostics such as traces, network, console and screenshots always use Chrome DevTools Protocol.
+
+**Parameters:**
+
+- **driver** (enum: "puppeteer", "wdio") **(required)**: The automation driver to use for subsequent actions.
 
 ---
 

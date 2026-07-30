@@ -81,10 +81,12 @@ describe('drivers/PuppeteerDriver', () => {
   it('types text and presses keys with modifiers', async () => {
     await withMcpContext(async (_response, context) => {
       const page = context.getSelectedPptrPage();
-      await page.setContent(html`<input
-        type="text"
-        onkeydown="(window.pressed ??= []).push(event.key + ':' + event.ctrlKey)"
-      />`);
+      await page.setContent(
+        html`<input
+          type="text"
+          onkeydown="(window.pressed ??= []).push(event.key + ':' + event.ctrlKey)"
+        />`,
+      );
       await page.focus('input');
       const mcpPage = context.getSelectedMcpPage();
       const driver = new PuppeteerDriver();

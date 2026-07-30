@@ -608,5 +608,14 @@
         "argType": "number"
       }
     ]
+  },
+  {
+    "name": "select_automation_driver",
+    "args": [
+      {
+        "name": "driver",
+        "argType": "string"
+      }
+    ]
   }
 ]

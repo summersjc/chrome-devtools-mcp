@@ -52,10 +52,7 @@ export class PuppeteerDriver implements AutomationDriver {
     await page.pptrPage.goBack({timeout: options?.timeout});
   }
 
-  async goForward(
-    page: ContextPage,
-    options?: NavigateOptions,
-  ): Promise<void> {
+  async goForward(page: ContextPage, options?: NavigateOptions): Promise<void> {
     await page.pptrPage.goForward({timeout: options?.timeout});
   }
 
@@ -166,5 +163,8 @@ export class PuppeteerDriver implements AutomationDriver {
     }
   }
 
-  async dispose(): Promise<void> {}
+  async dispose(): Promise<void> {
+    // The Puppeteer connection is owned by the browser lifecycle, not the
+    // driver; there is nothing to clean up.
+  }
 }

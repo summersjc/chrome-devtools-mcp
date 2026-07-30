@@ -36,12 +36,26 @@ Puppeteer/CDP path in both modes — that is what makes full parity possible.
 
 ### Shared Chrome, two clients
 
-The browser lifecycle does not change: Puppeteer launches (or connects to)
-Chrome exactly as today. When WDIO mode activates, a WDIO session is
-**attached to the same Chrome** using chromedriver's
+The browser lifecycle does not change by default: Puppeteer launches (or
+connects to) Chrome exactly as today. When WDIO mode activates, a WDIO
+session is **attached to the same Chrome** using chromedriver's
 `goog:chromeOptions.debuggerAddress` capability (host:port parsed from
 `browser.wsEndpoint()`). Both clients stay connected; switching drivers at
 runtime is a state flip, not a reconnect.
+
+**Transport caveat:** the server launches Chrome with a pipe transport
+(`pipe: true` in `src/browser.ts`), which exposes no TCP debug port, so
+chromedriver cannot attach. Therefore:
+
+- When the server starts with `--automation-driver wdio`, Chrome is launched
+  with `pipe: false` (WebSocket transport) so a TCP port exists. This is the
+  only lifecycle difference, and it is gated behind the flag.
+- Browsers connected via `--browser-url`, `--ws-endpoint`, or
+  `--auto-connect` always have a TCP endpoint; runtime switching works.
+- Runtime switching to WDIO on a default-started (pipe) server returns an
+  actionable error: restart with `--automation-driver wdio` or connect via
+  `--browser-url`. Detection: `browser.wsEndpoint()` returns an empty string
+  for pipe transports.
 
 ```
 MCP server
@@ -61,16 +75,41 @@ interface AutomationDriver {
   navigate(page: McpPage, url: string, opts: {timeout?: number}): Promise<void>;
   goBack(page: McpPage, opts): Promise<void>;
   goForward(page: McpPage, opts): Promise<void>;
-  reload(page: McpPage, opts: {ignoreCache?: boolean; timeout?: number}): Promise<void>;
-  click(page: McpPage, handle: ElementHandle, opts: {dblClick?: boolean}): Promise<void>;
-  clickAt(page: McpPage, x: number, y: number, opts: {dblClick?: boolean}): Promise<void>;
+  reload(
+    page: McpPage,
+    opts: {ignoreCache?: boolean; timeout?: number},
+  ): Promise<void>;
+  click(
+    page: McpPage,
+    handle: ElementHandle,
+    opts: {dblClick?: boolean},
+  ): Promise<void>;
+  clickAt(
+    page: McpPage,
+    x: number,
+    y: number,
+    opts: {dblClick?: boolean},
+  ): Promise<void>;
   hover(page: McpPage, handle: ElementHandle): Promise<void>;
-  fill(page: McpPage, handle: ElementHandle, value: string, opts: {timeout?: number}): Promise<void>;
-  selectOption(page: McpPage, handle: ElementHandle, value: string): Promise<void>;
+  fill(
+    page: McpPage,
+    handle: ElementHandle,
+    value: string,
+    opts: {timeout?: number},
+  ): Promise<void>;
+  selectOption(
+    page: McpPage,
+    handle: ElementHandle,
+    value: string,
+  ): Promise<void>;
   drag(page: McpPage, from: ElementHandle, to: ElementHandle): Promise<void>;
   typeText(page: McpPage, text: string, submitKey?: string): Promise<void>;
   pressKey(page: McpPage, key: KeyInput, modifiers: KeyInput[]): Promise<void>;
-  uploadFile(page: McpPage, handle: ElementHandle, filePath: string): Promise<void>;
+  uploadFile(
+    page: McpPage,
+    handle: ElementHandle,
+    filePath: string,
+  ): Promise<void>;
   dispose(): Promise<void>;
 }
 ```
@@ -80,7 +119,7 @@ interface AutomationDriver {
   moved behind the interface, byte-for-byte semantics.
 - **WdioDriver** — lazily created on first use. Maps each method to WDIO:
   `browser.url()/back()/forward()/refresh()`, `$(el).click()/moveTo()/
-  setValue()/selectByAttribute('value', …)/dragAndDrop()`, `browser.keys()`,
+setValue()/selectByAttribute('value', …)/dragAndDrop()`, `browser.keys()`,
   `browser.action('pointer')` for coordinates.
 
 Tool handlers change from direct Puppeteer calls to
@@ -141,13 +180,13 @@ back to matching by URL+title, and errors clearly if the tab cannot be found.
 
 ## Tool coverage matrix (WDIO mode)
 
-| Tool | Path |
-|---|---|
-| click, hover, fill, fill_form, drag, type_text, press_key, click_at | WDIO |
-| navigate_page (url/back/forward/reload), new_page's initial load | WDIO (page creation itself stays Puppeteer for collector wiring) |
-| upload_file | WDIO `setValue` on file input; falls back to the existing Puppeteer file-chooser path for proxy elements |
-| fill on combobox/select | option value resolved as today, then WDIO `selectByAttribute` |
-| handle_dialog, wait_for, resize_page, emulation, screenshots, snapshots, network, console, performance, memory, extensions, screencast, script eval | unchanged (CDP) — identical in both modes |
+| Tool                                                                                                                                                | Path                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| click, hover, fill, fill_form, drag, type_text, press_key, click_at                                                                                 | WDIO                                                                                                     |
+| navigate_page (url/back/forward/reload), new_page's initial load                                                                                    | WDIO (page creation itself stays Puppeteer for collector wiring)                                         |
+| upload_file                                                                                                                                         | WDIO `setValue` on file input; falls back to the existing Puppeteer file-chooser path for proxy elements |
+| fill on combobox/select                                                                                                                             | option value resolved as today, then WDIO `selectByAttribute`                                            |
+| handle_dialog, wait_for, resize_page, emulation, screenshots, snapshots, network, console, performance, memory, extensions, screencast, script eval | unchanged (CDP) — identical in both modes                                                                |
 
 `navigateWithInterception`'s allowList (CDP request interception) continues
 to work in WDIO mode because interception is browser-level CDP, independent

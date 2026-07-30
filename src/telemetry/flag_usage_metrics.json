@@ -16,6 +16,19 @@
     "flagType": "boolean"
   },
   {
+    "name": "automation_driver",
+    "flagType": "enum",
+    "choices": [
+      "AUTOMATION_DRIVER_UNSPECIFIED",
+      "AUTOMATION_DRIVER_PUPPETEER",
+      "AUTOMATION_DRIVER_WDIO"
+    ]
+  },
+  {
+    "name": "automation_driver_present",
+    "flagType": "boolean"
+  },
+  {
     "name": "browser_url_present",
     "flagType": "boolean"
   },

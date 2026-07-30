@@ -101,6 +101,7 @@ export async function createMcpServer(
             devtools,
             enableExtensions: serverArgs.categoryExtensions,
             viaCli: serverArgs.viaCli,
+            useWebSocketTransport: serverArgs.automationDriver === 'wdio',
           });
 
     if (context?.browser !== browser) {
@@ -108,6 +109,8 @@ export async function createMcpServer(
         experimentalDevToolsDebugging: devtools,
         experimentalIncludeAllPages: serverArgs.experimentalIncludeAllPages,
         performanceCrux: serverArgs.performanceCrux,
+        automationDriver:
+          serverArgs.automationDriver === 'wdio' ? 'wdio' : 'puppeteer',
       });
     }
     return context;

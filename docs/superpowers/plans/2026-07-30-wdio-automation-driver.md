@@ -4,7 +4,7 @@
 
 **Goal:** Add an opt-in WebdriverIO backend so user-visible browser actions run through WDIO commands, with zero change to default (Puppeteer) behavior.
 
-**Architecture:** An `AutomationDriver` interface at the action layer. `PuppeteerDriver` is the existing code moved behind the interface. `WdioDriver` attaches a WDIO session to the *same* Chrome via chromedriver's `goog:chromeOptions.debuggerAddress`. Diagnostics (traces, network, console, screenshots, emulation) stay on the existing Puppeteer/CDP path in both modes. Spec: `docs/superpowers/specs/2026-07-30-wdio-automation-driver-design.md`.
+**Architecture:** An `AutomationDriver` interface at the action layer. `PuppeteerDriver` is the existing code moved behind the interface. `WdioDriver` attaches a WDIO session to the _same_ Chrome via chromedriver's `goog:chromeOptions.debuggerAddress`. Diagnostics (traces, network, console, screenshots, emulation) stay on the existing Puppeteer/CDP path in both modes. Spec: `docs/superpowers/specs/2026-07-30-wdio-automation-driver-design.md`.
 
 **Tech Stack:** TypeScript (strict), Puppeteer, webdriverio v9 (optionalDependency, dynamic import), node:test + sinon, real-Chrome test harness (`tests/utils.ts` `withMcpContext`).
 
@@ -13,7 +13,7 @@
 - Default behavior must be byte-for-byte unchanged: no flag → Puppeteer path, pipe transport, same tool output strings.
 - `webdriverio` is an `optionalDependency`, loaded only via dynamic `import('webdriverio')` at WDIO activation; never bundled (it lives outside `src/third_party/`, which is the only thing rollup bundles).
 - Local Chrome only; hybrid allowed (element resolution/diagnostics via CDP, actions via WDIO).
-- Repo TS rules (AGENTS.md): no `any`, no `as`, no `!` non-null assertion, no ts-ignore/ts-expect-error comments. Pre-existing casts being *moved* keep their file; do not introduce new ones. Use type predicates and `ElementHandle.toElement()` instead.
+- Repo TS rules (AGENTS.md): no `any`, no `as`, no `!` non-null assertion, no ts-ignore/ts-expect-error comments. Pre-existing casts being _moved_ keep their file; do not introduce new ones. Use type predicates and `ElementHandle.toElement()` instead.
 - Only npm scripts for commands: `npm run build`, `npm run test tests/<file>.ts`, `npm run format`.
 - Chrome launched by this server uses `pipe: true` (`src/browser.ts:225`) → no TCP debug port. WDIO can only attach when the server started with `--automation-driver wdio` (launches with `pipe: false`) or when connected via `--browser-url`/`--ws-endpoint`/`--auto-connect`. Detection: `browser.wsEndpoint() === ''` means not attachable.
 - All user-facing error strings in this plan are exact; copy them verbatim.
@@ -23,11 +23,13 @@
 ### Task 1: AutomationDriver interface + PuppeteerDriver
 
 **Files:**
+
 - Create: `src/drivers/AutomationDriver.ts`
 - Create: `src/drivers/PuppeteerDriver.ts`
 - Test: `tests/drivers/PuppeteerDriver.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ContextPage` from `src/tools/ToolDefinition.ts`, `ElementHandle`/`KeyInput` from `src/third_party/index.ts`.
 - Produces: `AutomationDriver`, `WdioSession`, `WdioElement`, `NavigateOptions` types; `PuppeteerDriver` class; `uploadFileViaFileChooser(page, handle, filePath)` helper. Later tasks call driver methods with these exact signatures.
 
@@ -106,7 +108,11 @@ export interface AutomationDriver {
     from: ElementHandle<Element>,
     to: ElementHandle<Element>,
   ): Promise<void>;
-  typeText(page: ContextPage, text: string, submitKey?: KeyInput): Promise<void>;
+  typeText(
+    page: ContextPage,
+    text: string,
+    submitKey?: KeyInput,
+  ): Promise<void>;
   pressKey(
     page: ContextPage,
     key: KeyInput,
@@ -243,7 +249,12 @@ describe('drivers/PuppeteerDriver', () => {
   it('types text and presses keys', async () => {
     await withMcpContext(async (_response, context) => {
       const page = context.getSelectedPptrPage();
-      await page.setContent(html`<input type="text" autofocus />`);
+      await page.setContent(
+        html`<input
+          type="text"
+          autofocus
+        />`,
+      );
       await page.focus('input');
       const mcpPage = context.getSelectedMcpPage();
       const driver = new PuppeteerDriver();
@@ -323,10 +334,7 @@ export class PuppeteerDriver implements AutomationDriver {
     await page.pptrPage.goBack({timeout: options?.timeout});
   }
 
-  async goForward(
-    page: ContextPage,
-    options?: NavigateOptions,
-  ): Promise<void> {
+  async goForward(page: ContextPage, options?: NavigateOptions): Promise<void> {
     await page.pptrPage.goForward({timeout: options?.timeout});
   }
 
@@ -454,13 +462,16 @@ git commit -m "feat: add AutomationDriver interface and PuppeteerDriver"
 ```
 
 ---
+
 ### Task 2: WdioDriver
 
 **Files:**
+
 - Create: `src/drivers/WdioDriver.ts`
 - Test: `tests/drivers/WdioDriver.test.ts`
 
 **Interfaces:**
+
 - Consumes: `AutomationDriver`, `WdioSession`, `WdioElement` from Task 1; `uploadFileViaFileChooser` from Task 1; `Browser` from `src/third_party/index.ts`.
 - Produces: `WdioDriver` class with constructor `new WdioDriver(browser: Browser, sessionFactory?: (browser: Browser) => Promise<WdioSession>)`, method `ensureSession(): Promise<WdioSession>`, plus all `AutomationDriver` methods. Task 3 constructs it with only `browser`.
 
@@ -511,7 +522,10 @@ function createStubSession(calls: StubCall[]): WdioSession {
       calls.push({method: 'element.addValue', args: [value]});
     },
     async selectByAttribute(attribute: string, value: string) {
-      calls.push({method: 'element.selectByAttribute', args: [attribute, value]});
+      calls.push({
+        method: 'element.selectByAttribute',
+        args: [attribute, value],
+      });
     },
     async dragAndDrop(target: WdioElement) {
       calls.push({method: 'element.dragAndDrop', args: [target]});
@@ -693,10 +707,7 @@ describe('drivers/WdioDriver', () => {
       // The test harness launches Chrome with pipe: true, so wsEndpoint()
       // is empty and the default session factory must reject.
       const driver = new WdioDriver(context.browser);
-      await assert.rejects(
-        driver.ensureSession(),
-        /no TCP debugging endpoint/,
-      );
+      await assert.rejects(driver.ensureSession(), /no TCP debugging endpoint/);
     });
   });
 });
@@ -719,7 +730,12 @@ Expected: FAIL — module `src/drivers/WdioDriver.js` does not exist.
  */
 
 import {logger} from '../logger.js';
-import type {Browser, ElementHandle, KeyInput, Page} from '../third_party/index.js';
+import type {
+  Browser,
+  ElementHandle,
+  KeyInput,
+  Page,
+} from '../third_party/index.js';
 import type {ContextPage} from '../tools/ToolDefinition.js';
 
 import type {
@@ -836,7 +852,9 @@ export class WdioDriver implements AutomationDriver {
 
   constructor(
     browser: Browser,
-    sessionFactory: (browser: Browser) => Promise<WdioSession> = createWdioSession,
+    sessionFactory: (
+      browser: Browser,
+    ) => Promise<WdioSession> = createWdioSession,
   ) {
     this.#browser = browser;
     this.#sessionFactory = sessionFactory;
@@ -909,12 +927,9 @@ export class WdioDriver implements AutomationDriver {
     return await this.#run(async session => {
       await this.#switchToPage(session, page);
       if (handles.length === 1) {
-        await page.pptrPage.evaluate(
-          element => {
-            window.__cdmWdioEls = [element];
-          },
-          handles[0],
-        );
+        await page.pptrPage.evaluate(element => {
+          window.__cdmWdioEls = [element];
+        }, handles[0]);
       } else {
         await page.pptrPage.evaluate(
           (first, second) => {
@@ -967,10 +982,7 @@ export class WdioDriver implements AutomationDriver {
     });
   }
 
-  async goForward(
-    page: ContextPage,
-    options?: NavigateOptions,
-  ): Promise<void> {
+  async goForward(page: ContextPage, options?: NavigateOptions): Promise<void> {
     await this.#run(async session => {
       await this.#switchToPage(session, page);
       await session.setTimeout({
@@ -1134,6 +1146,7 @@ export class WdioDriver implements AutomationDriver {
 ```
 
 Implementation notes for the engineer:
+
 - `import('webdriverio')` requires the package to be installed for typechecking (it is, via Task 6's optionalDependencies — if building this task before Task 6, run `npm install --save-optional webdriverio@^9` first; that is fine, Task 6 just verifies it).
 - If `wdio.remote`'s return type is not structurally assignable in a way that trips the compiler, the `isWdioSession` type predicate is the sanctioned no-`as` conversion point — widen the predicate's checks rather than casting.
 - `Target.getTargetInfo` without arguments describes the session's own target; puppeteer's CDP types cover it.
@@ -1151,14 +1164,17 @@ git commit -m "feat: add WdioDriver attaching WebdriverIO to the shared Chrome"
 ```
 
 ---
+
 ### Task 3: McpContext driver state + Context interface
 
 **Files:**
+
 - Modify: `src/McpContext.ts` (options interface ~line 48, fields ~line 90, constructor ~line 94, `dispose()` ~line 131)
 - Modify: `src/tools/ToolDefinition.ts` (the `Context` type, ~line 172)
 - Test: `tests/McpContext.test.ts` (append a new `describe` block)
 
 **Interfaces:**
+
 - Consumes: `PuppeteerDriver`, `WdioDriver`, `AutomationDriver`, `AutomationDriverName` from Tasks 1–2.
 - Produces (used by Tasks 4–6):
   - `Context.getAutomationDriver(): AutomationDriver`
@@ -1286,10 +1302,12 @@ git commit -m "feat: expose automation driver selection on McpContext"
 ### Task 4: Route input tools through the driver
 
 **Files:**
+
 - Modify: `src/tools/input.ts` (every Puppeteer action call site: lines ~61-83 click, ~100-116 clickAt, ~133-149 hover, ~156-218 selectOption/fillFormElement, ~264-278 typeText, ~292-312 drag, ~368-400 uploadFile, ~417-439 pressKey)
 - Test: existing `tests/tools/input.test.ts` (must pass unchanged — that is the acceptance criterion)
 
 **Interfaces:**
+
 - Consumes: `context.getAutomationDriver()` from Task 3.
 - Produces: no new interfaces. All response strings stay identical.
 
@@ -1383,7 +1401,7 @@ handler: async (request, response, context) => {
 },
 ```
 
-  The `ElementHandle<HTMLInputElement>` cast at the old call site is deleted (PuppeteerDriver uses `toElement('input')`).
+The `ElementHandle<HTMLInputElement>` cast at the old call site is deleted (PuppeteerDriver uses `toElement('input')`).
 
 - `pressKey`:
 
@@ -1413,13 +1431,16 @@ git commit -m "refactor: route input tools through the automation driver"
 ```
 
 ---
+
 ### Task 5: Route navigation tools through the driver
 
 **Files:**
+
 - Modify: `src/tools/pages.ts` (`new_page` handler ~line 188-206, `navigate_page` handler ~line 254-374)
 - Test: existing `tests/tools/pages.test.ts` and `tests/tools/pagesNavigateAllowlist.test.ts` (must pass unchanged)
 
 **Interfaces:**
+
 - Consumes: `context.getAutomationDriver()` from Task 3.
 - Produces: none. `src/tools/performance.ts`'s `goto('about:blank')`/trace-reload calls are intentionally NOT routed (they are part of trace recording, a diagnostic flow).
 
@@ -1474,6 +1495,7 @@ git commit -m "refactor: route navigation tools through the automation driver"
 ### Task 6: CLI flag, launch transport, select_automation_driver tool
 
 **Files:**
+
 - Modify: `src/bin/chrome-devtools-mcp-cli-options.ts` (add option after `autoConnect`, ~line 23)
 - Modify: `src/browser.ts` (`McpLaunchOptions` + `launch()` `pipe:` at line 225)
 - Modify: `src/index.ts` (`getContext()` ~lines 69-113)
@@ -1483,6 +1505,7 @@ git commit -m "refactor: route navigation tools through the automation driver"
 - Generated: `docs/tool-reference.md`, README flag docs, telemetry metrics files
 
 **Interfaces:**
+
 - Consumes: `Context.selectAutomationDriver` / `getAutomationDriverName` (Task 3), `McpContextOptions.automationDriver` (Task 3).
 - Produces: CLI arg `serverArgs.automationDriver: 'puppeteer' | 'wdio'`; tool `select_automation_driver`; `McpLaunchOptions.useWebSocketTransport?: boolean`.
 
@@ -1508,6 +1531,7 @@ Note: `as const` in this file is the established pattern (see `channel`); it is 
 - [ ] **Step 2: Launch with a TCP-capable transport in WDIO mode**
 
 `src/browser.ts`:
+
 - Add to `McpLaunchOptions`: `useWebSocketTransport?: boolean;`
 - Change line 225 `pipe: true,` → `pipe: !options.useWebSocketTransport,`
 
@@ -1569,6 +1593,7 @@ export const selectAutomationDriver = defineTool({
 - [ ] **Step 4: Build and regenerate**
 
 Run in order:
+
 1. `npm run build` — expect clean compile.
 2. `npm run test tests/index.test.ts` — if the tool-list snapshot fails, run `npm run test:update-snapshots`, then inspect the snapshot diff: it must only add `select_automation_driver`.
 3. `npm run docs:generate` and `npm run cli:generate` — regenerates `docs/tool-reference.md` / CLI docs with the new tool + flag.
@@ -1592,11 +1617,13 @@ git commit -m "feat: add --automation-driver flag and select_automation_driver t
 ### Task 7: Optional dependency, gated e2e smoke test, README
 
 **Files:**
+
 - Modify: `package.json` (+ `package-lock.json`)
 - Create: `tests/e2e/wdio-driver.e2e.ts` (naming: check `tests/e2e/` for the local convention and match it)
 - Modify: `README.md` (new "WebdriverIO mode" section after the browser-connection docs)
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: shippable feature.
 
@@ -1725,6 +1752,3 @@ git commit -m "feat: webdriverio optional dependency, e2e smoke test and docs"
 - Spec coverage: activation (flag ✓ Task 6, runtime tool ✓ Task 6), driver seam (✓ Tasks 1-3), element bridge (✓ Task 2), tab targeting (✓ Task 2), transport caveat (✓ Task 6 Step 2), optional dep + lazy import (✓ Tasks 2/7), error handling (✓ Task 2: dead-session retry, no-endpoint error, missing-dep error), hybrid fallbacks (uploadFile chooser, ignoreCache reload ✓ Task 2), tests incl. gated e2e (✓ Tasks 1-7).
 - Existing suites (`input`, `pages`, `McpContext`, `index` snapshots) pass unchanged except the tool-list snapshot gaining one entry.
 - No new `as` casts / `any` / `!` outside the sanctioned patterns noted inline.
-
-
-

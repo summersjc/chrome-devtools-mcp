@@ -21,6 +21,16 @@ export const cliOptions = {
       return value;
     },
   },
+  automationDriver: {
+    type: 'string',
+    description:
+      'Automation driver used for user-visible actions (click, fill, navigate, keys). ' +
+      'The default is "puppeteer". ' +
+      '"wdio" routes actions through WebdriverIO attached to the same Chrome and ' +
+      'requires the optional "webdriverio" dependency; Chrome is then launched with ' +
+      'a WebSocket debugging transport. Diagnostics always use Chrome DevTools Protocol.',
+    choices: ['puppeteer', 'wdio'] as const,
+  },
   browserUrl: {
     type: 'string',
     description:
