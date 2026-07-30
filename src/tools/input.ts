@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {AutomationDriver} from '../drivers/AutomationDriver.js';
 import {logger} from '../logger.js';
 import type {McpContext} from '../McpContext.js';
 import {zod} from '../third_party/index.js';
@@ -58,13 +59,14 @@ export const click = definePageTool({
     dblClick: dblClickSchema,
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const uid = request.params.uid;
     const handle = await request.page.getElementByUid(uid);
+    const driver = context.getAutomationDriver();
     try {
       await request.page.waitForEventsAfterAction(async () => {
-        await handle.asLocator().click({
-          count: request.params.dblClick ? 2 : 1,
+        await driver.click(request.page, handle, {
+          dblClick: request.params.dblClick,
         });
       });
       response.appendResponseLine(
@@ -97,11 +99,12 @@ export const clickAt = definePageTool({
     dblClick: dblClickSchema,
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
+    const driver = context.getAutomationDriver();
     await page.waitForEventsAfterAction(async () => {
-      await page.pptrPage.mouse.click(request.params.x, request.params.y, {
-        clickCount: request.params.dblClick ? 2 : 1,
+      await driver.clickAt(page, request.params.x, request.params.y, {
+        dblClick: request.params.dblClick,
       });
     });
     response.appendResponseLine(
@@ -130,12 +133,13 @@ export const hover = definePageTool({
       ),
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const uid = request.params.uid;
     const handle = await request.page.getElementByUid(uid);
+    const driver = context.getAutomationDriver();
     try {
       await request.page.waitForEventsAfterAction(async () => {
-        await handle.asLocator().hover();
+        await driver.hover(request.page, handle);
       });
       response.appendResponseLine(`Successfully hovered over the element`);
       if (request.params.includeSnapshot) {
@@ -154,7 +158,9 @@ export const hover = definePageTool({
 // To do that, loop through the children while checking which child's text matches the requested value (requested value is actually the text content).
 // When the correct option is found, use the element handle to get the real value.
 async function selectOption(
-  handle: ElementHandle,
+  driver: AutomationDriver,
+  page: ContextPage,
+  handle: ElementHandle<Element>,
   aXNode: TextSnapshotNode,
   value: string,
 ) {
@@ -169,7 +175,7 @@ async function selectOption(
           try {
             const childValue = await childValueHandle.jsonValue();
             if (childValue) {
-              await handle.asLocator().fill(childValue.toString());
+              await driver.selectOption(page, handle, childValue.toString());
             }
           } finally {
             void childValueHandle.dispose();
@@ -197,18 +203,19 @@ async function fillFormElement(
   page: ContextPage,
 ) {
   const handle = await page.getElementByUid(uid);
+  const driver = context.getAutomationDriver();
   try {
     const aXNode = context.getAXNodeByUid(uid);
     // We assume that combobox needs to be handled as select if it has
     // role='combobox' and option children.
     if (aXNode && aXNode.role === 'combobox' && hasOptionChildren(aXNode)) {
-      await selectOption(handle, aXNode, value);
+      await selectOption(driver, page, handle, aXNode, value);
     } else {
       // Increase timeout for longer input values.
       const timeoutPerChar = 10; // ms
       const fillTimeout =
         page.pptrPage.getDefaultTimeout() + value.length * timeoutPerChar;
-      await handle.asLocator().setTimeout(fillTimeout).fill(value);
+      await driver.fill(page, handle, value, {timeout: fillTimeout});
     }
   } catch (error) {
     handleActionError(error, uid);
@@ -261,15 +268,15 @@ export const typeText = definePageTool({
     text: zod.string().describe('The text to type'),
     submitKey: submitKeySchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
+    const driver = context.getAutomationDriver();
     await page.waitForEventsAfterAction(async () => {
-      await page.pptrPage.keyboard.type(request.params.text);
-      if (request.params.submitKey) {
-        await page.pptrPage.keyboard.press(
-          request.params.submitKey as KeyInput,
-        );
-      }
+      await driver.typeText(
+        page,
+        request.params.text,
+        request.params.submitKey as KeyInput | undefined,
+      );
     });
     response.appendResponseLine(
       `Typed text "${request.params.text}${request.params.submitKey ? ` + ${request.params.submitKey}` : ''}"`,
@@ -289,16 +296,15 @@ export const drag = definePageTool({
     to_uid: zod.string().describe('The uid of the element to drop into'),
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const fromHandle = await request.page.getElementByUid(
       request.params.from_uid,
     );
     const toHandle = await request.page.getElementByUid(request.params.to_uid);
+    const driver = context.getAutomationDriver();
     try {
       await request.page.waitForEventsAfterAction(async () => {
-        await fromHandle.drag(toHandle);
-        await new Promise(resolve => setTimeout(resolve, 50));
-        await toHandle.drop(fromHandle);
+        await driver.drag(request.page, fromHandle, toHandle);
       });
       response.appendResponseLine(`Successfully dragged an element`);
       if (request.params.includeSnapshot) {
@@ -365,30 +371,12 @@ export const uploadFile = definePageTool({
     filePath: zod.string().describe('The local path of the file to upload'),
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const {uid, filePath} = request.params;
-    const handle = (await request.page.getElementByUid(
-      uid,
-    )) as ElementHandle<HTMLInputElement>;
+    const handle = await request.page.getElementByUid(uid);
+    const driver = context.getAutomationDriver();
     try {
-      try {
-        await handle.uploadFile(filePath);
-      } catch {
-        // Some sites use a proxy element to trigger file upload instead of
-        // a type=file element. In this case, we want to default to
-        // Page.waitForFileChooser() and upload the file this way.
-        try {
-          const [fileChooser] = await Promise.all([
-            request.page.pptrPage.waitForFileChooser({timeout: 3000}),
-            handle.asLocator().click(),
-          ]);
-          await fileChooser.accept([filePath]);
-        } catch {
-          throw new Error(
-            `Failed to upload file. The element could not accept the file directly, and clicking it did not trigger a file chooser.`,
-          );
-        }
-      }
+      await driver.uploadFile(request.page, handle, filePath);
       if (request.params.includeSnapshot) {
         response.includeSnapshot();
       }
@@ -414,19 +402,14 @@ export const pressKey = definePageTool({
       ),
     includeSnapshot: includeSnapshotSchema,
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
     const tokens = parseKey(request.params.key);
     const [key, ...modifiers] = tokens;
+    const driver = context.getAutomationDriver();
 
     await page.waitForEventsAfterAction(async () => {
-      for (const modifier of modifiers) {
-        await page.pptrPage.keyboard.down(modifier);
-      }
-      await page.pptrPage.keyboard.press(key);
-      for (const modifier of modifiers.toReversed()) {
-        await page.pptrPage.keyboard.up(modifier);
-      }
+      await driver.pressKey(page, key, modifiers);
     });
 
     response.appendResponseLine(
