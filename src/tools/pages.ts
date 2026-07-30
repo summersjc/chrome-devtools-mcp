@@ -190,11 +190,12 @@ export const newPage = defineTool(args => {
         request.params.background,
         request.params.isolatedContext,
       );
+      const driver = context.getAutomationDriver();
 
       await navigateWithInterception(
         page,
         () =>
-          page.pptrPage.goto(request.params.url, {
+          driver.navigate(page, request.params.url, {
             timeout: request.params.timeout,
           }),
         request.params.allowList,
@@ -251,8 +252,9 @@ export const navigatePage = definePageTool(args => {
         : {}),
       ...timeoutSchema,
     },
-    handler: async (request, response) => {
+    handler: async (request, response, context) => {
       const page = request.page;
+      const driver = context.getAutomationDriver();
       const options = {
         timeout: request.params.timeout,
       };
@@ -302,7 +304,7 @@ export const navigatePage = definePageTool(args => {
                   );
                 }
                 try {
-                  await page.pptrPage.goto(request.params.url, options);
+                  await driver.navigate(page, request.params.url, options);
                   response.appendResponseLine(
                     `Successfully navigated to ${request.params.url}.`,
                   );
@@ -314,7 +316,7 @@ export const navigatePage = definePageTool(args => {
                 break;
               case 'back':
                 try {
-                  await page.pptrPage.goBack(options);
+                  await driver.goBack(page, options);
                   response.appendResponseLine(
                     `Successfully navigated back to ${page.pptrPage.url()}.`,
                   );
@@ -326,7 +328,7 @@ export const navigatePage = definePageTool(args => {
                 break;
               case 'forward':
                 try {
-                  await page.pptrPage.goForward(options);
+                  await driver.goForward(page, options);
                   response.appendResponseLine(
                     `Successfully navigated forward to ${page.pptrPage.url()}.`,
                   );
@@ -338,7 +340,7 @@ export const navigatePage = definePageTool(args => {
                 break;
               case 'reload':
                 try {
-                  await page.pptrPage.reload({
+                  await driver.reload(page, {
                     ...options,
                     ignoreCache: request.params.ignoreCache,
                   });
