@@ -101,9 +101,13 @@ export async function createWdioSession(
     );
   }
   const url = new URL(wsEndpoint);
+  // Pin the browser version so WebdriverIO downloads a matching chromedriver
+  // instead of the latest one (e.g. "HeadlessChrome/147.0.7727.57").
+  const browserVersion = (await browser.version()).match(/[\d.]+$/)?.[0];
   const session = await remote({
     capabilities: {
       browserName: 'chrome',
+      ...(browserVersion ? {browserVersion} : {}),
       'goog:chromeOptions': {
         debuggerAddress: `${url.hostname}:${url.port}`,
       },
