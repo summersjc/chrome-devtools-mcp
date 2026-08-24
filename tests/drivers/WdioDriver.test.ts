@@ -33,6 +33,9 @@ function createStubSession(calls: StubCall[]): WdioSession {
     async moveTo() {
       calls.push({method: 'element.moveTo', args: []});
     },
+    async waitForEnabled(options?: {timeout?: number}) {
+      calls.push({method: 'element.waitForEnabled', args: [options]});
+    },
     async setValue(value: string) {
       calls.push({method: 'element.setValue', args: [value]});
     },
@@ -104,6 +107,10 @@ function createStubSession(calls: StubCall[]): WdioSession {
     async getUrl() {
       calls.push({method: 'getUrl', args: []});
       return 'about:blank';
+    },
+    async getTitle() {
+      calls.push({method: 'getTitle', args: []});
+      return 'stub title';
     },
     async setTimeout(timeouts: {pageLoad?: number}) {
       calls.push({method: 'setTimeout', args: [timeouts]});
@@ -217,6 +224,54 @@ describe('drivers/WdioDriver', () => {
       await driver.navigate(mcpPage, 'about:blank');
       assert.strictEqual(created, 2);
       assert.ok(methods(calls).includes('url'));
+    });
+  });
+
+  it('passes the caller-computed fill timeout to waitForEnabled', async () => {
+    await withMcpContext(async (_response, context) => {
+      const page = context.getSelectedPptrPage();
+      await page.setContent(html`<input />`);
+      const mcpPage = context.getSelectedMcpPage();
+      mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
+      const handle = await mcpPage.getElementByUid('1_1');
+      const calls: StubCall[] = [];
+      const driver = new WdioDriver(context.browser, async () =>
+        createStubSession(calls),
+      );
+      await driver.fill(mcpPage, handle, 'hello', {timeout: 4321});
+      const waitCall = calls.find(
+        call => call.method === 'element.waitForEnabled',
+      );
+      assert.deepStrictEqual(waitCall?.args[0], {timeout: 4321});
+      const setValueCall = calls.find(
+        call => call.method === 'element.setValue',
+      );
+      assert.deepStrictEqual(setValueCall?.args, ['hello']);
+    });
+  });
+
+  it('rejects elements that live inside an iframe', async () => {
+    await withMcpContext(async (_response, context) => {
+      const page = context.getSelectedPptrPage();
+      await page.setContent(
+        html`<iframe srcdoc="<button>inner</button>"></iframe>`,
+      );
+      const frame = page
+        .frames()
+        .find(candidate => candidate !== page.mainFrame());
+      assert.ok(frame, 'expected an iframe to be attached');
+      const handle = await frame.waitForSelector('button');
+      assert.ok(handle);
+      const mcpPage = context.getSelectedMcpPage();
+      const calls: StubCall[] = [];
+      const driver = new WdioDriver(context.browser, async () =>
+        createStubSession(calls),
+      );
+      await assert.rejects(
+        driver.click(mcpPage, handle),
+        /Elements inside iframes are not supported in wdio mode/,
+      );
+      assert.ok(!methods(calls).includes('element.click'));
     });
   });
 

@@ -6,7 +6,6 @@
 
 import type {AutomationDriver} from '../drivers/AutomationDriver.js';
 import {logger} from '../logger.js';
-import type {McpContext} from '../McpContext.js';
 import {zod} from '../third_party/index.js';
 import type {ElementHandle, KeyInput} from '../third_party/index.js';
 import type {TextSnapshotNode} from '../types.js';
@@ -199,13 +198,12 @@ function hasOptionChildren(aXNode: TextSnapshotNode) {
 async function fillFormElement(
   uid: string,
   value: string,
-  context: McpContext,
+  driver: AutomationDriver,
   page: ContextPage,
 ) {
   const handle = await page.getElementByUid(uid);
-  const driver = context.getAutomationDriver();
   try {
-    const aXNode = context.getAXNodeByUid(uid);
+    const aXNode = page.getAXNodeByUid(uid);
     // We assume that combobox needs to be handled as select if it has
     // role='combobox' and option children.
     if (aXNode && aXNode.role === 'combobox' && hasOptionChildren(aXNode)) {
@@ -246,7 +244,7 @@ export const fill = definePageTool({
       await fillFormElement(
         request.params.uid,
         request.params.value,
-        context as McpContext,
+        context.getAutomationDriver(),
         page,
       );
     });
@@ -343,7 +341,7 @@ export const fillForm = definePageTool({
         await fillFormElement(
           element.uid,
           element.value,
-          context as McpContext,
+          context.getAutomationDriver(),
           page,
         );
       });

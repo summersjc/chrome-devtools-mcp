@@ -94,6 +94,7 @@ export interface WdioElement {
   click(): Promise<void>;
   doubleClick(): Promise<void>;
   moveTo(): Promise<void>;
+  waitForEnabled(options?: {timeout?: number}): Promise<void>;
   setValue(value: string): Promise<void>;
   addValue(value: string): Promise<void>;
   selectByAttribute(attribute: string, value: string): Promise<void>;
@@ -122,6 +123,7 @@ export interface WdioSession {
   switchToWindow(handle: string): Promise<unknown>;
   getWindowHandles(): Promise<string[]>;
   getUrl(): Promise<string>;
+  getTitle(): Promise<string>;
   setTimeout(timeouts: {pageLoad?: number}): Promise<unknown>;
   deleteSession(): Promise<unknown>;
 }

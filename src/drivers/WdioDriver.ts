@@ -187,11 +187,27 @@ export class WdioDriver implements AutomationDriver {
     } catch (error) {
       logger('Direct window handle switch failed, matching by URL', error);
     }
+    const targetUrl = page.pptrPage.url();
+    const targetTitle = await page.pptrPage.title();
+    const matches: string[] = [];
     for (const handle of await session.getWindowHandles()) {
       await session.switchToWindow(handle);
-      if ((await session.getUrl()) === page.pptrPage.url()) {
-        return;
+      if (
+        (await session.getUrl()) === targetUrl &&
+        (await session.getTitle()) === targetTitle
+      ) {
+        matches.push(handle);
       }
+    }
+    if (matches.length === 1) {
+      await session.switchToWindow(matches[0]);
+      return;
+    }
+    if (matches.length > 1) {
+      throw new Error(
+        `Multiple WebdriverIO windows match URL "${targetUrl}" — close the ` +
+          'duplicate tabs, or select the page again to refresh its handle.',
+      );
     }
     throw new Error(
       'Could not find a WebdriverIO window matching the selected page.',
@@ -205,6 +221,19 @@ export class WdioDriver implements AutomationDriver {
   ): Promise<T> {
     return await this.#run(async session => {
       await this.#switchToPage(session, page);
+      // The stash is written and read in the top-level browsing context, so a
+      // handle from an iframe would either throw on evaluate or silently
+      // resolve to the wrong node. Fail loudly instead.
+      const mainFrame = page.pptrPage.mainFrame();
+      for (const handle of handles) {
+        if (handle.frame !== mainFrame) {
+          throw new Error(
+            'Elements inside iframes are not supported in wdio mode. Switch ' +
+              'back to the puppeteer driver with select_automation_driver to ' +
+              'interact with this element.',
+          );
+        }
+      }
       if (handles.length === 1) {
         await page.pptrPage.evaluate(element => {
           window.__cdmWdioEls = [element];
@@ -337,9 +366,14 @@ export class WdioDriver implements AutomationDriver {
     page: ContextPage,
     handle: ElementHandle<Element>,
     value: string,
-    _options?: FillOptions,
+    options?: FillOptions,
   ): Promise<void> {
     await this.#withElements(page, [handle], async (_session, [element]) => {
+      // Callers scale the timeout to the value length; without this the
+      // WebDriver default applies and long fills time out early.
+      await element.waitForEnabled(
+        options?.timeout === undefined ? undefined : {timeout: options.timeout},
+      );
       await element.setValue(value);
     });
   }
