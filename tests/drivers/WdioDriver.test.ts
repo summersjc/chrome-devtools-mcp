@@ -275,6 +275,27 @@ describe('drivers/WdioDriver', () => {
     });
   });
 
+  it('uploads a file by replacing the input selection', async () => {
+    await withMcpContext(async (_response, context) => {
+      const page = context.getSelectedPptrPage();
+      await page.setContent(html`<input type="file" />`);
+      const mcpPage = context.getSelectedMcpPage();
+      mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
+      const handle = await mcpPage.getElementByUid('1_1');
+      const calls: StubCall[] = [];
+      const driver = new WdioDriver(context.browser, async () =>
+        createStubSession(calls),
+      );
+      await driver.uploadFile(mcpPage, handle, '/tmp/example.txt');
+      // setValue clears first; addValue would append on repeat uploads.
+      const setValueCall = calls.find(
+        call => call.method === 'element.setValue',
+      );
+      assert.deepStrictEqual(setValueCall?.args, ['/tmp/example.txt']);
+      assert.ok(!methods(calls).includes('element.addValue'));
+    });
+  });
+
   it('errors clearly when the browser has no TCP endpoint', async () => {
     await withMcpContext(async (_response, context) => {
       // The test harness launches Chrome with pipe: true, so wsEndpoint()

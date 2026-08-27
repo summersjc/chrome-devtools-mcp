@@ -45,24 +45,29 @@ describe('wdio driver e2e', {skip: !enabled}, () => {
         },
         Locator,
       );
-      const driver = context.getAutomationDriver();
-      assert.strictEqual(driver.name, 'wdio');
-      const mcpPage = context.getSelectedMcpPage();
-      await driver.navigate(
-        mcpPage,
-        `data:text/html,<button onclick="this.innerText='clicked'">go</button><input>`,
-      );
-      mcpPage.textSnapshot = await TextSnapshotClass.create(mcpPage);
-      const buttonUid = findUidByRole(mcpPage.textSnapshot, 'button');
-      const button = await mcpPage.getElementByUid(buttonUid);
-      await driver.click(mcpPage, button);
-      assert.ok(await mcpPage.pptrPage.$('text/clicked'));
-      const inputUid = findUidByRole(mcpPage.textSnapshot, 'textbox');
-      const input = await mcpPage.getElementByUid(inputUid);
-      await driver.fill(mcpPage, input, 'hello');
-      const value = await mcpPage.pptrPage.$eval('input', el => el.value);
-      assert.strictEqual(value, 'hello');
-      context.dispose();
+      try {
+        const driver = context.getAutomationDriver();
+        assert.strictEqual(driver.name, 'wdio');
+        const mcpPage = context.getSelectedMcpPage();
+        await driver.navigate(
+          mcpPage,
+          `data:text/html,<button onclick="this.innerText='clicked'">go</button><input>`,
+        );
+        mcpPage.textSnapshot = await TextSnapshotClass.create(mcpPage);
+        const buttonUid = findUidByRole(mcpPage.textSnapshot, 'button');
+        const button = await mcpPage.getElementByUid(buttonUid);
+        await driver.click(mcpPage, button);
+        assert.ok(await mcpPage.pptrPage.$('text/clicked'));
+        const inputUid = findUidByRole(mcpPage.textSnapshot, 'textbox');
+        const input = await mcpPage.getElementByUid(inputUid);
+        await driver.fill(mcpPage, input, 'hello');
+        const value = await mcpPage.pptrPage.$eval('input', el => el.value);
+        assert.strictEqual(value, 'hello');
+      } finally {
+        // Dispose even when an assertion throws, or the chromedriver session
+        // outlives the test.
+        context.dispose();
+      }
     } finally {
       await browser.close();
     }

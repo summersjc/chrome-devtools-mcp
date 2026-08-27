@@ -439,7 +439,9 @@ export class WdioDriver implements AutomationDriver {
   ): Promise<void> {
     try {
       await this.#withElements(page, [handle], async (_session, [element]) => {
-        await element.addValue(filePath);
+        // setValue clears first, matching Puppeteer's uploadFile, which
+        // replaces the selection rather than appending to it.
+        await element.setValue(filePath);
       });
     } catch {
       await uploadFileViaFileChooser(page, handle, filePath);
