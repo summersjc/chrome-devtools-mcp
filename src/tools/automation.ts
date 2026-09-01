@@ -22,6 +22,8 @@ export const selectAutomationDriver = defineTool({
       .enum(['puppeteer', 'wdio'])
       .describe('The automation driver to use for subsequent actions.'),
   },
+  blockedByDialog: false,
+  verifyFilesSchema: {},
   handler: async (request, response, context) => {
     await context.selectAutomationDriver(request.params.driver);
     response.appendResponseLine(

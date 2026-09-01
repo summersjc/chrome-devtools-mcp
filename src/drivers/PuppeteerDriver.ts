@@ -22,14 +22,14 @@ import type {
 export async function uploadFileViaFileChooser(
   page: ContextPage,
   handle: ElementHandle<Element>,
-  filePath: string,
+  filePaths: string[],
 ): Promise<void> {
   try {
     const [fileChooser] = await Promise.all([
       page.pptrPage.waitForFileChooser({timeout: 3000}),
       handle.asLocator().click(),
     ]);
-    await fileChooser.accept([filePath]);
+    await fileChooser.accept(filePaths);
   } catch {
     throw new Error(
       `Failed to upload file. The element could not accept the file directly, and clicking it did not trigger a file chooser.`,
@@ -80,7 +80,7 @@ export class PuppeteerDriver implements AutomationDriver {
     options?: ClickOptions,
   ): Promise<void> {
     await page.pptrPage.mouse.click(x, y, {
-      clickCount: options?.dblClick ? 2 : 1,
+      count: options?.dblClick ? 2 : 1,
     });
   }
 
@@ -138,28 +138,36 @@ export class PuppeteerDriver implements AutomationDriver {
     key: KeyInput,
     modifiers: KeyInput[],
   ): Promise<void> {
-    for (const modifier of modifiers) {
-      await page.pptrPage.keyboard.down(modifier);
-    }
-    await page.pptrPage.keyboard.press(key);
-    for (const modifier of modifiers.toReversed()) {
-      await page.pptrPage.keyboard.up(modifier);
+    const heldModifiers: KeyInput[] = [];
+    try {
+      for (const modifier of modifiers) {
+        await page.pptrPage.keyboard.down(modifier);
+        heldModifiers.push(modifier);
+      }
+      await page.pptrPage.keyboard.press(key);
+    } finally {
+      // Release every modifier that was successfully pressed, even if a
+      // later key event throws. Otherwise a failed press leaves modifiers
+      // logically held down in the browser (see #2309).
+      for (const modifier of heldModifiers.toReversed()) {
+        await page.pptrPage.keyboard.up(modifier);
+      }
     }
   }
 
   async uploadFile(
     page: ContextPage,
     handle: ElementHandle<Element>,
-    filePath: string,
+    filePaths: string[],
   ): Promise<void> {
     try {
       const input = await handle.toElement('input');
-      await input.uploadFile(filePath);
+      await input.uploadFile(...filePaths);
     } catch {
       // Some sites use a proxy element to trigger file upload instead of
       // a type=file element. In this case, we want to default to
       // Page.waitForFileChooser() and upload the file this way.
-      await uploadFileViaFileChooser(page, handle, filePath);
+      await uploadFileViaFileChooser(page, handle, filePaths);
     }
   }
 

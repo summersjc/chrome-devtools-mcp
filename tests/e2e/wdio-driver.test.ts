@@ -7,7 +7,6 @@
 import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
-import logger from 'debug';
 import puppeteer, {Locator} from 'puppeteer';
 
 import {McpContext} from '../../src/McpContext.js';
@@ -37,7 +36,7 @@ describe('wdio driver e2e', {skip: !enabled}, () => {
     try {
       const context = await McpContext.from(
         browser,
-        logger('test'),
+        undefined,
         {
           experimentalDevToolsDebugging: false,
           performanceCrux: false,

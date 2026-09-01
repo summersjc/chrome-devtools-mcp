@@ -6,37 +6,51 @@
 
 import type fs from 'node:fs';
 
-import type {parseArguments} from './bin/chrome-devtools-mcp-cli-options.js';
+import {type ParsedArguments} from './config/mcp-options.js';
 import type {Channel} from './browser.js';
 import {ensureBrowserConnected, ensureBrowserLaunched} from './browser.js';
-import {loadIssueDescriptions} from './issue-descriptions.js';
-import {logger} from './logger.js';
+import {loadIssueDescriptions} from './devtools/issueDescriptions.js';
 import {McpContext} from './McpContext.js';
-import {McpResponse} from './McpResponse.js';
-import {Mutex} from './Mutex.js';
-import {SlimMcpResponse} from './SlimMcpResponse.js';
 import {ClearcutLogger} from './telemetry/ClearcutLogger.js';
-import {bucketizeLatency} from './telemetry/metricUtils.js';
+import {FilePersistence} from './telemetry/persistence.js';
 import {
   McpServer,
   type CallToolResult,
+  type Root,
   SetLevelRequestSchema,
+  ListRootsResultSchema,
+  RootsListChangedNotificationSchema,
 } from './third_party/index.js';
-import {ToolCategory} from './tools/categories.js';
+import {ToolHandler} from './ToolHandler.js';
 import type {DefinedPageTool, ToolDefinition} from './tools/ToolDefinition.js';
-import {pageIdSchema} from './tools/ToolDefinition.js';
 import {createTools} from './tools/tools.js';
+import {logger} from './utils/logger.js';
+import {Mutex, puppeteer} from './third_party/index.js';
 import {VERSION} from './version.js';
 
+export {buildFlag} from './ToolHandler.js';
+
+puppeteer.setFollowSymlinks(false);
+
+/**
+ * Timeout for a `roots/list` that a tool call is waiting on, matching the 5s
+ * default used for page operations. `getContext()` awaits it while
+ * `ToolHandler` holds the tool mutex, so leaving it unbounded lets a client
+ * that negotiates `roots` but does not answer block every tool for the SDK's
+ * default of 60s. Background refreshes are not bounded by this, so roots a
+ * slow client sends late still land.
+ */
+const ROOTS_REQUEST_TIMEOUT = 5_000;
+
 export async function createMcpServer(
-  serverArgs: ReturnType<typeof parseArguments>,
+  serverArgs: ParsedArguments,
   options: {
     logFile?: fs.WriteStream;
   },
 ) {
-  let clearcutLogger: ClearcutLogger | undefined;
   if (serverArgs.usageStatistics) {
-    clearcutLogger = new ClearcutLogger({
+    ClearcutLogger.initialize({
+      persistence: new FilePersistence(),
       logFile: serverArgs.logFile,
       appVersion: VERSION,
       clearcutEndpoint: serverArgs.clearcutEndpoint,
@@ -57,10 +71,51 @@ export async function createMcpServer(
     return {};
   });
 
+  // Roots are client state rather than browser state, so the last listing stays
+  // valid across browser reconnects and only the client can invalidate it, via
+  // the `roots/list_changed` notification handled below
+  let lastRoots: Root[] | undefined;
+
+  // `timeout` is only passed where a tool call is waiting on the result – the
+  // background refreshes below block nobody, so bounding them would just discard
+  // roots a slow client was about to send
+  const updateRoots = async (timeout?: number) => {
+    if (!server.server.getClientCapabilities()?.roots) {
+      return;
+    }
+    try {
+      const roots = await server.server.request(
+        {method: 'roots/list'},
+        ListRootsResultSchema,
+        timeout === undefined ? undefined : {timeout},
+      );
+      lastRoots = roots.roots;
+      context?.setRoots(lastRoots);
+    } catch (e) {
+      logger?.('Failed to list roots', e);
+    }
+  };
+
   server.server.oninitialized = () => {
     const clientName = server.server.getClientVersion()?.name;
     if (clientName) {
-      clearcutLogger?.setClientName(clientName);
+      ClearcutLogger.get()?.setClientName(clientName);
+    }
+    if (server.server.getClientCapabilities()?.roots) {
+      void updateRoots();
+      server.server.setNotificationHandler(
+        RootsListChangedNotificationSchema,
+        () => {
+          void updateRoots();
+        },
+      );
+    } else if (!serverArgs.allowUnrestrictedPaths) {
+      console.warn(
+        '[chrome-devtools-mcp] The connecting client did not negotiate the MCP roots ' +
+          'capability. File-writing tools will be restricted to the OS temp directory. ' +
+          'To restore the previous unrestricted behavior, start the server with ' +
+          '--allow-unrestricted-paths.',
+      );
     }
   };
 
@@ -74,6 +129,13 @@ export async function createMcpServer(
       chromeArgs.push(`--proxy-server=${serverArgs.proxyServer}`);
     }
     const devtools = serverArgs.experimentalDevtools ?? false;
+    const blocklist = serverArgs.blockedUrlPattern
+      ? serverArgs.blockedUrlPattern.map(String)
+      : undefined;
+    const allowlist = serverArgs.allowedUrlPattern
+      ? serverArgs.allowedUrlPattern.map(String)
+      : undefined;
+
     const browser =
       serverArgs.browserUrl || serverArgs.wsEndpoint || serverArgs.autoConnect
         ? await ensureBrowserConnected({
@@ -86,6 +148,8 @@ export async function createMcpServer(
               : undefined,
             userDataDir: serverArgs.userDataDir,
             devtools,
+            blocklist,
+            allowlist,
           })
         : await ensureBrowserLaunched({
             headless: serverArgs.headless,
@@ -101,17 +165,35 @@ export async function createMcpServer(
             devtools,
             enableExtensions: serverArgs.categoryExtensions,
             viaCli: serverArgs.viaCli,
+            blocklist,
+            allowlist,
             useWebSocketTransport: serverArgs.automationDriver === 'wdio',
           });
 
     if (context?.browser !== browser) {
+      context?.dispose();
       context = await McpContext.from(browser, logger, {
         experimentalDevToolsDebugging: devtools,
         experimentalIncludeAllPages: serverArgs.experimentalIncludeAllPages,
         performanceCrux: serverArgs.performanceCrux,
+        allowList: allowlist,
+        blocklist: blocklist,
+        allowUnrestrictedPaths: serverArgs.allowUnrestrictedPaths,
+        // Surfaces a one-time note in the next response after a reconnect.
+        reconnected: context !== undefined,
         automationDriver:
           serverArgs.automationDriver === 'wdio' ? 'wdio' : 'puppeteer',
       });
+      if (lastRoots === undefined) {
+        // Nothing listed yet, so this call has to wait – bounded, since it is
+        // holding the tool mutex, and a later background refresh still lands
+        await updateRoots(ROOTS_REQUEST_TIMEOUT);
+      } else {
+        // Carry the known roots over and refresh out of band, so a reconnect
+        // never pays for a client round-trip
+        context.setRoots(lastRoots);
+        void updateRoots();
+      }
     }
     return context;
   }
@@ -119,163 +201,26 @@ export async function createMcpServer(
   const toolMutex = new Mutex();
 
   function registerTool(tool: ToolDefinition | DefinedPageTool): void {
-    if (
-      tool.annotations.category === ToolCategory.EMULATION &&
-      serverArgs.categoryEmulation === false
-    ) {
+    const toolHandler = new ToolHandler(
+      tool,
+      serverArgs,
+      getContext,
+      toolMutex,
+    );
+
+    if (!toolHandler.shouldRegister) {
       return;
     }
-    if (
-      tool.annotations.category === ToolCategory.PERFORMANCE &&
-      serverArgs.categoryPerformance === false
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.category === ToolCategory.NETWORK &&
-      serverArgs.categoryNetwork === false
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.category === ToolCategory.EXTENSIONS &&
-      serverArgs.categoryExtensions === false
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.category === ToolCategory.IN_PAGE &&
-      !serverArgs.categoryInPageTools
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.conditions?.includes('computerVision') &&
-      !serverArgs.experimentalVision
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.conditions?.includes('experimentalMemory') &&
-      !serverArgs.experimentalMemory
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.conditions?.includes('experimentalInteropTools') &&
-      !serverArgs.experimentalInteropTools
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.conditions?.includes('screencast') &&
-      !serverArgs.experimentalScreencast
-    ) {
-      return;
-    }
-    if (
-      tool.annotations.conditions?.includes('experimentalWebmcp') &&
-      !serverArgs.experimentalWebmcp
-    ) {
-      return;
-    }
-    const schema =
-      'pageScoped' in tool &&
-      tool.pageScoped &&
-      serverArgs.experimentalPageIdRouting &&
-      !serverArgs.slim
-        ? {...tool.schema, ...pageIdSchema}
-        : tool.schema;
 
     server.registerTool(
       tool.name,
       {
         description: tool.description,
-        inputSchema: schema,
+        inputSchema: toolHandler.registeredInputSchema,
         annotations: tool.annotations,
       },
       async (params): Promise<CallToolResult> => {
-        const guard = await toolMutex.acquire();
-        const startTime = Date.now();
-        let success = false;
-        try {
-          logger(`${tool.name} request: ${JSON.stringify(params, null, '  ')}`);
-          const context = await getContext();
-          logger(`${tool.name} context: resolved`);
-          await context.detectOpenDevToolsWindows();
-          const response = serverArgs.slim
-            ? new SlimMcpResponse(serverArgs)
-            : new McpResponse(serverArgs);
-
-          response.setRedactNetworkHeaders(serverArgs.redactNetworkHeaders);
-          if ('pageScoped' in tool && tool.pageScoped) {
-            const page =
-              serverArgs.experimentalPageIdRouting &&
-              params.pageId &&
-              !serverArgs.slim
-                ? context.getPageById(params.pageId)
-                : context.getSelectedMcpPage();
-            response.setPage(page);
-            await tool.handler(
-              {
-                params,
-                page,
-              },
-              response,
-              context,
-            );
-          } else {
-            await tool.handler(
-              // @ts-expect-error types do not match.
-              {
-                params,
-              },
-              response,
-              context,
-            );
-          }
-          const {content, structuredContent} = await response.handle(
-            tool.name,
-            context,
-          );
-          const result: CallToolResult & {
-            structuredContent?: Record<string, unknown>;
-          } = {
-            content,
-          };
-          success = true;
-          if (serverArgs.experimentalStructuredContent) {
-            result.structuredContent = structuredContent as Record<
-              string,
-              unknown
-            >;
-          }
-          return result;
-        } catch (err) {
-          logger(`${tool.name} error:`, err, err?.stack);
-          let errorText = err && 'message' in err ? err.message : String(err);
-          if ('cause' in err && err.cause) {
-            errorText += `\nCause: ${err.cause.message}`;
-          }
-          return {
-            content: [
-              {
-                type: 'text',
-                text: errorText,
-              },
-            ],
-            isError: true,
-          };
-        } finally {
-          void clearcutLogger?.logToolInvocation({
-            toolName: tool.name,
-            params,
-            schema,
-            success,
-            latencyMs: bucketizeLatency(Date.now() - startTime),
-          });
-          guard.dispose();
-        }
+        return await toolHandler.handle(params);
       },
     );
   }
@@ -287,10 +232,10 @@ export async function createMcpServer(
 
   await loadIssueDescriptions();
 
-  return {server, clearcutLogger};
+  return {server};
 }
 
-export const logDisclaimers = (args: ReturnType<typeof parseArguments>) => {
+export const logDisclaimers = (args: ParsedArguments) => {
   console.error(
     `chrome-devtools-mcp exposes content of the browser instance to the MCP clients allowing them to inspect,
 debug, and modify any data in the browser or DevTools.

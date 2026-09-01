@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {ErrorCode} from './errors.js';
+
 // Protobuf message interfaces
 export interface ChromeDevToolsMcpExtension {
   os_type?: OsType;
@@ -14,15 +16,33 @@ export interface ChromeDevToolsMcpExtension {
   server_start?: ServerStart;
   daily_active?: DailyActive;
   server_shutdown?: ServerShutdown;
+  server_error?: ServerError;
+}
+
+export interface ServerError {
+  tool_name?: string;
+  error_code: ErrorCode;
 }
 
 export type ServerShutdown = Record<string, never>;
+
+export interface LoggedDevToolsData {
+  is_dom_element_selected?: boolean;
+  is_network_request_selected?: boolean;
+}
+
+export interface ToolInvocationContext {
+  is_devtools_open?: boolean;
+  is_localhost?: boolean;
+  devtools_data?: LoggedDevToolsData;
+}
 
 export interface ToolInvocation {
   tool_name: string;
   success: boolean;
   latency_ms: number;
   tool_params?: object;
+  context?: ToolInvocationContext;
 }
 
 export interface ServerStart {
@@ -64,14 +84,6 @@ export enum OsType {
   OS_TYPE_LINUX = 3,
 }
 
-export enum ChromeChannel {
-  CHROME_CHANNEL_UNSPECIFIED = 0,
-  CHROME_CHANNEL_CANARY = 1,
-  CHROME_CHANNEL_DEV = 2,
-  CHROME_CHANNEL_BETA = 3,
-  CHROME_CHANNEL_STABLE = 4,
-}
-
 export enum McpClient {
   MCP_CLIENT_UNSPECIFIED = 0,
   MCP_CLIENT_CLAUDE_CODE = 1,
@@ -80,6 +92,10 @@ export enum McpClient {
   MCP_CLIENT_OPENCLAW = 5,
   MCP_CLIENT_CODEX = 6,
   MCP_CLIENT_ANTIGRAVITY = 7,
+  MCP_CLIENT_GROK = 8,
+  MCP_CLIENT_OPENCODE = 9,
+  MCP_CLIENT_CLAUDE_DESKTOP = 10,
+  MCP_CLIENT_GITHUB_COPILOT = 11,
   MCP_CLIENT_OTHER = 3,
 }
 

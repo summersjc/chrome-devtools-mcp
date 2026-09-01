@@ -27,7 +27,7 @@ describe('drivers/PuppeteerDriver', () => {
 
   it('clicks an element', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(
         html`<button onclick="this.innerText = 'clicked';">test</button>`,
       );
@@ -42,7 +42,7 @@ describe('drivers/PuppeteerDriver', () => {
 
   it('double clicks an element', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(
         html`<button ondblclick="this.innerText = 'dbl';">test</button>`,
       );
@@ -57,14 +57,17 @@ describe('drivers/PuppeteerDriver', () => {
 
   it('fills an input', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(html`<input type="text" />`);
       const mcpPage = context.getSelectedMcpPage();
       mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
       const handle = await mcpPage.getElementByUid('1_1');
       const driver = new PuppeteerDriver();
       await driver.fill(mcpPage, handle, 'hello');
-      const value = await page.$eval('input', input => input.value);
+      const value = await page.$eval(
+        'input',
+        (input: HTMLInputElement) => input.value,
+      );
       assert.strictEqual(value, 'hello');
     });
   });
@@ -80,7 +83,7 @@ describe('drivers/PuppeteerDriver', () => {
 
   it('types text and presses keys with modifiers', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(
         html`<input
           type="text"
@@ -91,7 +94,10 @@ describe('drivers/PuppeteerDriver', () => {
       const mcpPage = context.getSelectedMcpPage();
       const driver = new PuppeteerDriver();
       await driver.typeText(mcpPage, 'abc');
-      const value = await page.$eval('input', input => input.value);
+      const value = await page.$eval(
+        'input',
+        (input: HTMLInputElement) => input.value,
+      );
       assert.strictEqual(value, 'abc');
       await driver.pressKey(mcpPage, 'a', ['Control']);
       const pressed = await page.evaluate(() => {

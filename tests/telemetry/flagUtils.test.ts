@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
-import type {cliOptions} from '../../src/bin/chrome-devtools-mcp-cli-options.js';
+import type {mcpOptions} from '../../src/config/mcp-options.js';
 import {
   computeFlagUsage,
   getPossibleFlagMetrics,
@@ -33,7 +33,7 @@ describe('computeFlagUsage', () => {
       description: 'A flag with a default value',
       default: false,
     },
-  } as unknown as typeof cliOptions;
+  } as unknown as typeof mcpOptions;
 
   it('logs boolean flags directly with snake_case keys', () => {
     const args = {boolFlag: true};
@@ -106,6 +106,18 @@ describe('computeFlagUsage', () => {
       const usage = computeFlagUsage(args, mockOptions);
       assert.equal(usage.string_flag_present, false);
     });
+
+    it('sanitizes flag names containing underscores before numbers', () => {
+      const mock3pOptions = {
+        experimental3pTool: {
+          type: 'boolean' as const,
+          description: 'A 3p flag',
+        },
+      } as unknown as typeof mcpOptions;
+      const args = {experimental3pTool: true};
+      const usage = computeFlagUsage(args, mock3pOptions);
+      assert.equal(usage.experimental3p_tool, true);
+    });
   });
 });
 
@@ -124,7 +136,7 @@ describe('getPossibleFlagMetrics', () => {
       description: 'An enum flag',
       choices: ['a', 'b'],
     },
-  } as unknown as typeof cliOptions;
+  } as unknown as typeof mcpOptions;
 
   it('returns all possible metrics for given options', () => {
     const metrics = getPossibleFlagMetrics(mockOptions);
@@ -139,6 +151,21 @@ describe('getPossibleFlagMetrics', () => {
         flagType: 'enum',
         choices: ['ENUM_FLAG_UNSPECIFIED', 'ENUM_FLAG_A', 'ENUM_FLAG_B'],
       },
+    ]);
+  });
+
+  it('sanitizes flag names containing underscores before numbers', () => {
+    const mock3pOptions = {
+      experimental3pTool: {
+        type: 'boolean' as const,
+        description: 'A 3p flag',
+      },
+    } as unknown as typeof mcpOptions;
+    const metrics = getPossibleFlagMetrics(mock3pOptions);
+
+    assert.deepEqual(metrics, [
+      {name: 'experimental3p_tool_present', flagType: 'boolean'},
+      {name: 'experimental3p_tool', flagType: 'boolean'},
     ]);
   });
 });

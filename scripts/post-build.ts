@@ -19,10 +19,19 @@ function writeFile(filePath: string, content: string): void {
 }
 
 function main(): void {
+  const devtoolsTs = path.join(
+    process.cwd(),
+    'src',
+    'third_party',
+    'devtools.ts',
+  );
+  if (fs.existsSync(devtoolsTs)) {
+    fs.unlinkSync(devtoolsTs);
+  }
   const devtoolsThirdPartyPath =
-    'node_modules/chrome-devtools-frontend/front_end/third_party';
+    'third_party/devtools-frontend/front_end/third_party';
   const devtoolsFrontEndCorePath =
-    'node_modules/chrome-devtools-frontend/front_end/core';
+    'third_party/devtools-frontend/front_end/core';
 
   // Create i18n mock
   const i18nDir = path.join(BUILD_DIR, devtoolsFrontEndCorePath, 'i18n');
@@ -52,8 +61,40 @@ export const LOCAL_FETCH_PATTERN = './locales/@LOCALE@.json';`;
   );
   fs.mkdirSync(codeMirrorDir, {recursive: true});
   const codeMirrorFile = path.join(codeMirrorDir, 'codemirror.next.js');
-  const codeMirrorContent = `export default {}`;
+  const codeMirrorContent = `
+export default {};
+export const cssStreamParser = () => Promise.resolve({ startState: () => ({}) });
+export class StringStream { constructor() {} }
+export const css = { cssLanguage: { parser: { parse: () => ({ topNode: { getChild: () => null } }) } } };
+`;
   writeFile(codeMirrorFile, codeMirrorContent);
+
+  // Create skills mocks
+  const skillsDir = path.join(
+    BUILD_DIR,
+    'third_party',
+    'devtools-frontend',
+    'front_end',
+    'models',
+    'ai_assistance',
+    'skills',
+  );
+  fs.mkdirSync(skillsDir, {recursive: true});
+  const skillMockContent = `
+export const skill = {
+  name: '',
+  description: '',
+  tools: [],
+  systemPrompt: '',
+};
+export default skill;
+`;
+  writeFile(path.join(skillsDir, 'accessibility.skill.js'), skillMockContent);
+  writeFile(path.join(skillsDir, 'network.skill.js'), skillMockContent);
+  writeFile(path.join(skillsDir, 'performance.skill.js'), skillMockContent);
+  writeFile(path.join(skillsDir, 'sources.skill.js'), skillMockContent);
+  writeFile(path.join(skillsDir, 'storage.skill.js'), skillMockContent);
+  writeFile(path.join(skillsDir, 'styling.skill.js'), skillMockContent);
 
   // Create root mock
   const rootDir = path.join(BUILD_DIR, devtoolsFrontEndCorePath, 'root');
@@ -61,7 +102,23 @@ export const LOCAL_FETCH_PATTERN = './locales/@LOCALE@.json';`;
   const runtimeFile = path.join(rootDir, 'Runtime.js');
   const runtimeContent = `
 export function getChromeVersion() { return ''; };
+export function getRemoteBase() { return null; };
 export const hostConfig = {};
+export const GenAiEnterprisePolicyValue = {
+  ALLOW: 0,
+  ALLOW_WITHOUT_LOGGING: 1,
+  DISABLE: 2,
+};
+export const HostConfigFreestylerExecutionMode = {
+  ALL_SCRIPTS: 'ALL_SCRIPTS',
+  SIDE_EFFECT_FREE_SCRIPTS_ONLY: 'SIDE_EFFECT_FREE_SCRIPTS_ONLY',
+  NO_SCRIPTS: 'NO_SCRIPTS',
+};
+export const GdpProfilesEnterprisePolicyValue = {
+  ENABLED: 0,
+  ENABLED_WITHOUT_BADGES: 1,
+  DISABLED: 2,
+};
 export const Runtime = {
   isDescriptorEnabled: () => true,
   queryParam: () => null,
@@ -94,12 +151,39 @@ export const ExperimentName = {
   `;
   writeFile(runtimeFile, runtimeContent);
 
+  // Copy missing CodeMirror .mjs files that tsc ignores due to .d.mts renames
+  const codemirrorDir = path.join(
+    BUILD_DIR,
+    devtoolsThirdPartyPath,
+    'codemirror',
+  );
+  const codemirrorSrcDir = path.join(
+    process.cwd(),
+    'third_party',
+    'devtools-frontend',
+    'front_end',
+    'third_party',
+    'codemirror',
+  );
+  const filesToCopy = [
+    'package/addon/runmode/runmode-standalone.mjs',
+    'package/mode/css/css.mjs',
+    'package/mode/javascript/javascript.mjs',
+    'package/mode/xml/xml.mjs',
+  ];
+  for (const file of filesToCopy) {
+    const src = path.join(codemirrorSrcDir, file);
+    const dest = path.join(codemirrorDir, file);
+    fs.mkdirSync(path.dirname(dest), {recursive: true});
+    fs.copyFileSync(src, dest);
+  }
+
   copyDevToolsDescriptionFiles();
 }
 
-function copyDevToolsDescriptionFiles() {
+function copyDevToolsDescriptionFiles(): void {
   const devtoolsIssuesDescriptionPath =
-    'node_modules/chrome-devtools-frontend/front_end/models/issues_manager/descriptions';
+    'third_party/devtools-frontend/front_end/models/issues_manager/descriptions';
   const sourceDir = path.join(process.cwd(), devtoolsIssuesDescriptionPath);
   const destDir = path.join(
     BUILD_DIR,

@@ -33,6 +33,10 @@ in the DevTools Elements panel (if any).`,
         'The absolute path, or a path relative to the current working directory, to save the snapshot to instead of attaching it to the response.',
       ),
   },
+  blockedByDialog: true,
+  verifyFilesSchema: {
+    filePath: true,
+  },
   handler: async (request, response) => {
     response.includeSnapshot({
       verbose: request.params.verbose ?? false,
@@ -57,13 +61,11 @@ export const waitFor = definePageTool({
       ),
     ...timeoutSchema,
   },
-  handler: async (request, response, context) => {
+  blockedByDialog: true,
+  verifyFilesSchema: {},
+  handler: async (request, response) => {
     const page = request.page;
-    await context.waitForTextOnPage(
-      request.params.text,
-      request.params.timeout,
-      page.pptrPage,
-    );
+    await page.waitForTextOnPage(request.params.text, request.params.timeout);
 
     response.appendResponseLine(
       `Element matching one of ${JSON.stringify(request.params.text)} found.`,

@@ -13,6 +13,7 @@ import type {
   WdioSession,
 } from '../../src/drivers/AutomationDriver.js';
 import {WdioDriver} from '../../src/drivers/WdioDriver.js';
+import type {Frame} from '../../src/third_party/index.js';
 import {TextSnapshot} from '../../src/TextSnapshot.js';
 import {serverHooks} from '../server.js';
 import {html, withMcpContext} from '../utils.js';
@@ -130,7 +131,7 @@ describe('drivers/WdioDriver', () => {
 
   it('clicks a bridged element and cleans up the stash', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(html`<button>test</button>`);
       const mcpPage = context.getSelectedMcpPage();
       mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
@@ -148,7 +149,7 @@ describe('drivers/WdioDriver', () => {
 
   it('double clicks via doubleClick', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(html`<button>test</button>`);
       const mcpPage = context.getSelectedMcpPage();
       mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
@@ -229,7 +230,7 @@ describe('drivers/WdioDriver', () => {
 
   it('passes the caller-computed fill timeout to waitForEnabled', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(html`<input />`);
       const mcpPage = context.getSelectedMcpPage();
       mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
@@ -252,13 +253,13 @@ describe('drivers/WdioDriver', () => {
 
   it('rejects elements that live inside an iframe', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(
         html`<iframe srcdoc="<button>inner</button>"></iframe>`,
       );
       const frame = page
         .frames()
-        .find(candidate => candidate !== page.mainFrame());
+        .find((candidate: Frame) => candidate !== page.mainFrame());
       assert.ok(frame, 'expected an iframe to be attached');
       const handle = await frame.waitForSelector('button');
       assert.ok(handle);
@@ -277,7 +278,7 @@ describe('drivers/WdioDriver', () => {
 
   it('uploads a file by replacing the input selection', async () => {
     await withMcpContext(async (_response, context) => {
-      const page = context.getSelectedPptrPage();
+      const page = context.getSelectedMcpPage().pptrPage;
       await page.setContent(html`<input type="file" />`);
       const mcpPage = context.getSelectedMcpPage();
       mcpPage.textSnapshot = await TextSnapshot.create(mcpPage);
@@ -286,7 +287,7 @@ describe('drivers/WdioDriver', () => {
       const driver = new WdioDriver(context.browser, async () =>
         createStubSession(calls),
       );
-      await driver.uploadFile(mcpPage, handle, '/tmp/example.txt');
+      await driver.uploadFile(mcpPage, handle, ['/tmp/example.txt']);
       // setValue clears first; addValue would append on repeat uploads.
       const setValueCall = calls.find(
         call => call.method === 'element.setValue',

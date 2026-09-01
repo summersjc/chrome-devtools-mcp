@@ -81,7 +81,7 @@ export interface AutomationDriver {
   uploadFile(
     page: ContextPage,
     handle: ElementHandle<Element>,
-    filePath: string,
+    filePaths: string[],
   ): Promise<void>;
   dispose(): Promise<void>;
 }

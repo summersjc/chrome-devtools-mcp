@@ -34,7 +34,7 @@ const FILTERABLE_RESOURCE_TYPES: readonly [ResourceType, ...ResourceType[]] = [
 
 export const listNetworkRequests = definePageTool({
   name: 'list_network_requests',
-  description: `List all requests for the currently selected page since the last navigation.`,
+  description: `Lists the most recent requests for the currently selected page since the last navigation.`,
   annotations: {
     category: ToolCategory.NETWORK,
     readOnlyHint: true,
@@ -70,11 +70,13 @@ export const listNetworkRequests = definePageTool({
         'Set to true to return the preserved requests over the last 3 navigations.',
       ),
   },
-  handler: async (request, response, context) => {
+  blockedByDialog: false,
+  verifyFilesSchema: {},
+  handler: async (request, response) => {
     const data = await request.page.getDevToolsData();
     response.attachDevToolsData(data);
     const reqid = data?.cdpRequestId
-      ? context.resolveCdpRequestId(request.page, data.cdpRequestId)
+      ? request.page.resolveCdpRequestId(data.cdpRequestId)
       : undefined;
     response.setIncludeNetworkRequests(true, {
       pageSize: request.params.pageSize,
@@ -113,7 +115,12 @@ export const getNetworkRequest = definePageTool({
         'The absolute or relative path to a .network-response file to save the response body to. If omitted, the body is returned inline.',
       ),
   },
-  handler: async (request, response, context) => {
+  blockedByDialog: true,
+  verifyFilesSchema: {
+    requestFilePath: true,
+    responseFilePath: true,
+  },
+  handler: async (request, response) => {
     if (request.params.reqid) {
       response.attachNetworkRequest(request.params.reqid, {
         requestFilePath: request.params.requestFilePath,
@@ -123,7 +130,7 @@ export const getNetworkRequest = definePageTool({
       const data = await request.page.getDevToolsData();
       response.attachDevToolsData(data);
       const reqid = data?.cdpRequestId
-        ? context.resolveCdpRequestId(request.page, data.cdpRequestId)
+        ? request.page.resolveCdpRequestId(data.cdpRequestId)
         : undefined;
       if (reqid) {
         response.attachNetworkRequest(reqid, {

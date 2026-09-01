@@ -13,12 +13,13 @@ export const listWebMcpTools = definePageTool({
   name: 'list_webmcp_tools',
   description: `Lists all WebMCP tools the page exposes.`,
   annotations: {
-    category: ToolCategory.DEBUGGING,
+    category: ToolCategory.WEBMCP,
     readOnlyHint: true,
-    conditions: ['experimentalWebmcp'],
   },
   schema: {},
-  handler: async (_request, response, _context) => {
+  blockedByDialog: false,
+  verifyFilesSchema: {},
+  handler: async (_request, response) => {
     response.setListWebMcpTools();
   },
 });
@@ -27,9 +28,8 @@ export const executeWebMcpTool = definePageTool({
   name: 'execute_webmcp_tool',
   description: `Executes a WebMCP tool exposed by the page.`,
   annotations: {
-    category: ToolCategory.DEBUGGING,
+    category: ToolCategory.WEBMCP,
     readOnlyHint: false,
-    conditions: ['experimentalWebmcp'],
   },
   schema: {
     toolName: zod.string().describe('The name of the WebMCP tool to execute'),
@@ -38,6 +38,8 @@ export const executeWebMcpTool = definePageTool({
       .optional()
       .describe('The JSON-stringified parameters to pass to the WebMCP tool'),
   },
+  blockedByDialog: false,
+  verifyFilesSchema: {},
   handler: async (request, response) => {
     const toolName = request.params.toolName;
 

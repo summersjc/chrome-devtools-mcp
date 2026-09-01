@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {logger} from '../logger.js';
+import {logger} from '../utils/logger.js';
 import type {
   Browser,
   ElementHandle,
@@ -155,7 +155,7 @@ export class WdioDriver implements AutomationDriver {
       if (!isSessionDeadError(error)) {
         throw error;
       }
-      logger('WDIO session died, re-attaching once', error);
+      logger?.('WDIO session died, re-attaching once', error);
       this.#session = undefined;
       const fresh = await this.ensureSession();
       return await action(fresh);
@@ -174,7 +174,7 @@ export class WdioDriver implements AutomationDriver {
       return targetInfo.targetId;
     } finally {
       await cdp.detach().catch(error => {
-        logger('Failed to detach CDP session', error);
+        logger?.('Failed to detach CDP session', error);
       });
     }
   }
@@ -185,7 +185,7 @@ export class WdioDriver implements AutomationDriver {
       await session.switchToWindow(`CDwindow-${targetId}`);
       return;
     } catch (error) {
-      logger('Direct window handle switch failed, matching by URL', error);
+      logger?.('Direct window handle switch failed, matching by URL', error);
     }
     const targetUrl = page.pptrPage.url();
     const targetTitle = await page.pptrPage.title();
@@ -260,7 +260,7 @@ export class WdioDriver implements AutomationDriver {
             delete window.__cdmWdioEls;
           })
           .catch(error => {
-            logger('Failed to clean up WDIO element stash', error);
+            logger?.('Failed to clean up WDIO element stash', error);
           });
       }
     });
@@ -435,16 +435,17 @@ export class WdioDriver implements AutomationDriver {
   async uploadFile(
     page: ContextPage,
     handle: ElementHandle<Element>,
-    filePath: string,
+    filePaths: string[],
   ): Promise<void> {
     try {
       await this.#withElements(page, [handle], async (_session, [element]) => {
         // setValue clears first, matching Puppeteer's uploadFile, which
-        // replaces the selection rather than appending to it.
-        await element.setValue(filePath);
+        // replaces the selection rather than appending to it. WebDriver takes
+        // multiple files as newline-separated paths on a single send-keys.
+        await element.setValue(filePaths.join('\n'));
       });
     } catch {
-      await uploadFileViaFileChooser(page, handle, filePath);
+      await uploadFileViaFileChooser(page, handle, filePaths);
     }
   }
 
@@ -453,7 +454,7 @@ export class WdioDriver implements AutomationDriver {
     this.#session = undefined;
     if (session) {
       await session.deleteSession().catch(error => {
-        logger('Failed to delete WDIO session', error);
+        logger?.('Failed to delete WDIO session', error);
       });
     }
   }
