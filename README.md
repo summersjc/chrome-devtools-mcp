@@ -531,11 +531,12 @@ If you run into any issues, checkout our [troubleshooting guide](./docs/troubles
   - [`type_text`](docs/tool-reference.md#type_text)
   - [`upload_file`](docs/tool-reference.md#upload_file)
   - [`click_at`](docs/tool-reference.md#click_at)
-- **Navigation automation** (6 tools)
+- **Navigation automation** (7 tools)
   - [`close_page`](docs/tool-reference.md#close_page)
   - [`list_pages`](docs/tool-reference.md#list_pages)
   - [`navigate_page`](docs/tool-reference.md#navigate_page)
   - [`new_page`](docs/tool-reference.md#new_page)
+  - [`select_automation_driver`](docs/tool-reference.md#select_automation_driver)
   - [`select_page`](docs/tool-reference.md#select_page)
   - [`wait_for`](docs/tool-reference.md#wait_for)
 - **Emulation** (2 tools)
@@ -600,6 +601,12 @@ The Chrome DevTools MCP server supports the following configuration option:
 - **`--autoConnect`/ `--auto-connect`**
   If specified, automatically connects to a browser (Chrome 144+) running locally from the user data directory identified by the channel param (default channel is stable). Requires the remote debugging server to be started in the Chrome instance via chrome://inspect/#remote-debugging.
   - **Type:** boolean
+  - **Default:** `false`
+
+- **`--automationDriver`/ `--automation-driver`**
+  Automation driver used for user-visible actions (click, fill, navigate, keys). The default is "puppeteer". "wdio" routes actions through WebdriverIO attached to the same Chrome and requires the optional "webdriverio" dependency; Chrome is then launched with a WebSocket debugging transport. Diagnostics always use Chrome DevTools Protocol.
+  - **Type:** string
+  - **Choices:** `puppeteer`, `wdio`
   - **Default:** `false`
 
 - **`--browserUrl`/ `--browser-url`, `-u`**

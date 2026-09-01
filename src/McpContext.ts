@@ -10,6 +10,12 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 import {overrideDevToolsGlobals} from './devtools/DevtoolsUtils.js';
+import type {
+  AutomationDriver,
+  AutomationDriverName,
+} from './drivers/AutomationDriver.js';
+import {PuppeteerDriver} from './drivers/PuppeteerDriver.js';
+import {WdioDriver} from './drivers/WdioDriver.js';
 import {HeapSnapshotManager} from './processors/HeapSnapshotManager.js';
 import type {
   HeapSnapshotAggregateData,
@@ -70,6 +76,8 @@ interface McpContextOptions {
   reconnected?: boolean;
   // Custom navigation timeout in milliseconds to override default.
   navigationTimeout?: number;
+  // The driver used for user-visible actions. Defaults to 'puppeteer'.
+  automationDriver?: AutomationDriverName;
 }
 
 // Page ids are handed out from a process-wide counter so they stay unique
@@ -113,6 +121,10 @@ export class McpContext implements Context {
   #roots: Root[] | undefined = undefined;
   #allowUnrestrictedPaths: boolean;
 
+  #automationDriverName: AutomationDriverName = 'puppeteer';
+  #puppeteerDriver = new PuppeteerDriver();
+  #wdioDriver?: WdioDriver;
+
   private constructor(
     browser: Browser,
     logger: Logger,
@@ -130,6 +142,7 @@ export class McpContext implements Context {
     this.#locatorClass = locatorClass;
     this.#options = options;
     this.#allowUnrestrictedPaths = options.allowUnrestrictedPaths ?? false;
+    this.#automationDriverName = options.automationDriver ?? 'puppeteer';
     this.#reconnectNotice = options.reconnected ?? false;
 
     this.#serviceWorkerConsoleCollector = new ServiceWorkerConsoleCollector(
@@ -146,7 +159,36 @@ export class McpContext implements Context {
     this.browser.on('targetdestroyed', this.#onTargetDestroyed);
   }
 
+  getAutomationDriver(): AutomationDriver {
+    if (this.#automationDriverName === 'wdio') {
+      return this.#getWdioDriver();
+    }
+    return this.#puppeteerDriver;
+  }
+
+  getAutomationDriverName(): AutomationDriverName {
+    return this.#automationDriverName;
+  }
+
+  async selectAutomationDriver(name: AutomationDriverName): Promise<void> {
+    if (name === 'wdio') {
+      // Attach eagerly so configuration problems surface at switch time
+      // instead of on the first action.
+      await this.#getWdioDriver().ensureSession();
+    }
+    this.#automationDriverName = name;
+  }
+
+  #getWdioDriver(): WdioDriver {
+    if (!this.#wdioDriver) {
+      this.#wdioDriver = new WdioDriver(this.browser);
+    }
+    return this.#wdioDriver;
+  }
+
   dispose() {
+    void this.#wdioDriver?.dispose();
+    this.#wdioDriver = undefined;
     this.browser.off('targetcreated', this.#onTargetCreated);
     this.browser.off('targetdestroyed', this.#onTargetDestroyed);
 

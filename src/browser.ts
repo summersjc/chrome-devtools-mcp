@@ -163,6 +163,9 @@ interface McpLaunchOptions {
   viaCli?: boolean;
   blocklist?: string[];
   allowlist?: string[];
+  // Launch with a WebSocket debugging transport instead of a pipe so other
+  // clients (e.g. WebdriverIO via chromedriver) can attach over TCP.
+  useWebSocketTransport?: boolean;
 }
 
 export function detectDisplay(): void {
@@ -235,7 +238,7 @@ export async function launch(options: McpLaunchOptions): Promise<Browser> {
       executablePath,
       defaultViewport: null,
       userDataDir,
-      pipe: true,
+      pipe: !options.useWebSocketTransport,
       headless,
       args,
       ignoreDefaultArgs: ignoreDefaultArgs,
