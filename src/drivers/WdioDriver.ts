@@ -90,7 +90,10 @@ export async function createWdioSession(
     logLevel: 'silent';
   }) => Promise<unknown>;
   try {
-    const wdio = await import('webdriverio');
+    // Indirect specifier so TypeScript does not resolve "webdriverio" at build
+    // time: it is an optional peer dependency and may not be installed.
+    const specifier = 'webdriverio';
+    const wdio = (await import(specifier)) as {remote: typeof remote};
     remote = wdio.remote;
   } catch (error) {
     throw new Error(
