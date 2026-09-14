@@ -186,8 +186,10 @@ export class McpContext implements Context {
     return this.#wdioDriver;
   }
 
-  dispose() {
-    void this.#wdioDriver?.dispose();
+  async dispose(): Promise<void> {
+    // Awaited so the chromedriver session is torn down before shutdown
+    // completes; otherwise the process can outlive us.
+    await this.#wdioDriver?.dispose();
     this.#wdioDriver = undefined;
     this.browser.off('targetcreated', this.#onTargetCreated);
     this.browser.off('targetdestroyed', this.#onTargetDestroyed);

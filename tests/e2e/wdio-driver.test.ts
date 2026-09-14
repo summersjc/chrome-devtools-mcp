@@ -65,7 +65,7 @@ describe('wdio driver e2e', {skip: !enabled}, () => {
       } finally {
         // Dispose even when an assertion throws, or the chromedriver session
         // outlives the test.
-        context.dispose();
+        await context.dispose();
       }
     } finally {
       await browser.close();
