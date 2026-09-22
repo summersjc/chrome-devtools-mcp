@@ -88,13 +88,17 @@
   },
   "peerDependencies": {
     "@blackwell-systems/gcf": "^2.2.2",
-    "@toon-format/toon": "^4.1.0"
+    "@toon-format/toon": "^4.1.0",
+    "webdriverio": "^9.0.0"
   },
   "peerDependenciesMeta": {
     "@toon-format/toon": {
       "optional": true
     },
     "@blackwell-systems/gcf": {
+      "optional": true
+    },
+    "webdriverio": {
       "optional": true
     }
   },

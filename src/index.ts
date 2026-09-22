@@ -167,10 +167,11 @@ export async function createMcpServer(
             viaCli: serverArgs.viaCli,
             blocklist,
             allowlist,
+            useWebSocketTransport: serverArgs.automationDriver === 'wdio',
           });
 
     if (context?.browser !== browser) {
-      context?.dispose();
+      await context?.dispose();
       context = await McpContext.from(browser, logger, {
         experimentalDevToolsDebugging: devtools,
         experimentalIncludeAllPages: serverArgs.experimentalIncludeAllPages,
@@ -180,6 +181,8 @@ export async function createMcpServer(
         allowUnrestrictedPaths: serverArgs.allowUnrestrictedPaths,
         // Surfaces a one-time note in the next response after a reconnect.
         reconnected: context !== undefined,
+        automationDriver:
+          serverArgs.automationDriver === 'wdio' ? 'wdio' : 'puppeteer',
       });
       if (lastRoots === undefined) {
         // Nothing listed yet, so this call has to wait – bounded, since it is

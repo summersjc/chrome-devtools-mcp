@@ -6,6 +6,10 @@
 
 import type {ParsedArguments} from '../config/mcp-options.js';
 import type {
+  AutomationDriver,
+  AutomationDriverName,
+} from '../drivers/AutomationDriver.js';
+import type {
   HeapSnapshotAggregateData,
   HeapSnapshotClassDiff,
   HeapSnapshotDetailedClassDiff,
@@ -212,6 +216,9 @@ export type SupportedExtensions =
  * Only add methods used by tools/*.
  */
 export type Context = Readonly<{
+  getAutomationDriver(): AutomationDriver;
+  getAutomationDriverName(): AutomationDriverName;
+  selectAutomationDriver(name: AutomationDriverName): Promise<void>;
   installPWA(options: InstallPWAOptions): Promise<string>;
   uninstallPWA(options: UninstallPWAOptions): Promise<void>;
   launchPWA(options: LaunchPWAOptions): Promise<Page>;

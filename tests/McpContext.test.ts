@@ -240,7 +240,7 @@ describe('McpContext', () => {
       };
       const first = await McpContext.from(browser, undefined, options, Locator);
       const idBeforeReconnect = (await first.newPage()).id;
-      first.dispose();
+      await first.dispose();
 
       // A new context (as created after a browser reconnect) continues the
       // shared id counter, so an id handed out before no longer resolves and
@@ -261,7 +261,7 @@ describe('McpContext', () => {
           'ids continue past the pre-reconnect ids',
         );
       } finally {
-        second.dispose();
+        await second.dispose();
       }
     });
   });
@@ -282,7 +282,7 @@ describe('McpContext', () => {
         assert.ok(context.consumeReconnectNotice(), 'notice available once');
         assert.ok(!context.consumeReconnectNotice(), 'notice does not repeat');
       } finally {
-        context.dispose();
+        await context.dispose();
       }
     });
   });
@@ -296,7 +296,7 @@ describe('McpContext', () => {
       await context.getHeapSnapshotStats(filePath);
       assert.ok(context.hasHeapSnapshots(), 'snapshot loaded before teardown');
 
-      context.dispose();
+      await context.dispose();
 
       assert.ok(
         !context.hasHeapSnapshots(),
@@ -823,6 +823,33 @@ describe('McpContext', () => {
           const result = context.getSelectedMcpPageUrl();
           assert.strictEqual(result, undefined);
         });
+      });
+    });
+  });
+
+  describe('automation driver', () => {
+    it('defaults to puppeteer', async () => {
+      await withMcpContext(async (_response, context) => {
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
+        assert.strictEqual(context.getAutomationDriver().name, 'puppeteer');
+      });
+    });
+
+    it('selecting puppeteer is a no-op', async () => {
+      await withMcpContext(async (_response, context) => {
+        await context.selectAutomationDriver('puppeteer');
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
+      });
+    });
+
+    it('selecting wdio on a pipe-connected browser fails with guidance', async () => {
+      await withMcpContext(async (_response, context) => {
+        await assert.rejects(
+          context.selectAutomationDriver('wdio'),
+          /no TCP debugging endpoint/,
+        );
+        // The failed switch must not change the active driver.
+        assert.strictEqual(context.getAutomationDriverName(), 'puppeteer');
       });
     });
   });

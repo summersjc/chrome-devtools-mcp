@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {McpContext} from '../McpContext.js';
+import type {AutomationDriver} from '../drivers/AutomationDriver.js';
 import {zod} from '../third_party/index.js';
 import type {ElementHandle, KeyInput} from '../third_party/index.js';
 import type {TextSnapshotNode} from '../types.js';
@@ -99,12 +99,13 @@ export const click = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const uid = request.params.uid;
     using handle = await request.page.getElementByUid(uid);
     const aXNode = request.page.getAXNodeByUid(uid);
     const shouldSelectNativeOption =
       !request.params.dblClick && aXNode?.role === 'option';
+    const driver = context.getAutomationDriver();
     try {
       const result = await request.page.waitForEventsAfterAction(async () => {
         if (
@@ -114,8 +115,8 @@ export const click = definePageTool({
           return;
         }
 
-        await handle.asLocator().click({
-          count: request.params.dblClick ? 2 : 1,
+        await driver.click(request.page, handle, {
+          dblClick: request.params.dblClick,
         });
       });
       response.appendResponseLine(
@@ -149,11 +150,12 @@ export const clickAt = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
+    const driver = context.getAutomationDriver();
     const result = await page.waitForEventsAfterAction(async () => {
-      await page.pptrPage.mouse.click(request.params.x, request.params.y, {
-        count: request.params.dblClick ? 2 : 1,
+      await driver.clickAt(page, request.params.x, request.params.y, {
+        dblClick: request.params.dblClick,
       });
     });
     response.appendResponseLine(
@@ -185,12 +187,13 @@ export const hover = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const uid = request.params.uid;
     using handle = await request.page.getElementByUid(uid);
+    const driver = context.getAutomationDriver();
     try {
       const result = await request.page.waitForEventsAfterAction(async () => {
-        await handle.asLocator().hover();
+        await driver.hover(request.page, handle);
       });
       response.appendResponseLine(`Successfully hovered over the element`);
       response.attachWaitForResult(result);
@@ -208,6 +211,8 @@ export const hover = definePageTool({
 // To do that, loop through the children while checking which child's text matches the requested value (requested value is actually the text content).
 // When the correct option is found, use the element handle to get the real value.
 async function selectOption(
+  driver: AutomationDriver,
+  page: ContextPage,
   handle: ElementHandle,
   aXNode: TextSnapshotNode,
   value: string,
@@ -222,7 +227,7 @@ async function selectOption(
 
         const childValue = await childValueHandle.jsonValue();
         if (typeof childValue === 'string') {
-          await handle.asLocator().fill(childValue);
+          await driver.selectOption(page, handle, childValue);
         }
 
         break;
@@ -241,7 +246,7 @@ function hasOptionChildren(aXNode: TextSnapshotNode) {
 async function fillFormElement(
   uid: string,
   value: string,
-  context: McpContext,
+  driver: AutomationDriver,
   page: ContextPage,
 ) {
   using handle = await page.getElementByUid(uid);
@@ -250,7 +255,7 @@ async function fillFormElement(
     // We assume that combobox needs to be handled as select if it has
     // role='combobox' and option children.
     if (aXNode && aXNode.role === 'combobox' && hasOptionChildren(aXNode)) {
-      await selectOption(handle, aXNode, value);
+      await selectOption(driver, page, handle, aXNode, value);
     } else {
       const isToggle = await handle.evaluate(el => {
         if (el instanceof HTMLInputElement) {
@@ -273,7 +278,7 @@ async function fillFormElement(
         const timeoutPerChar = 10; // ms
         const fillTimeout =
           page.pptrPage.getDefaultTimeout() + value.length * timeoutPerChar;
-        await handle.asLocator().setTimeout(fillTimeout).fill(value);
+        await driver.fill(page, handle, value, {timeout: fillTimeout});
       }
     }
   } catch (error) {
@@ -309,7 +314,7 @@ export const fill = definePageTool({
       await fillFormElement(
         request.params.uid,
         request.params.value,
-        context as McpContext,
+        context.getAutomationDriver(),
         page,
       );
     });
@@ -334,15 +339,15 @@ export const typeText = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
+    const driver = context.getAutomationDriver();
     const result = await page.waitForEventsAfterAction(async () => {
-      await page.pptrPage.keyboard.type(request.params.text);
-      if (request.params.submitKey) {
-        await page.pptrPage.keyboard.press(
-          request.params.submitKey as KeyInput,
-        );
-      }
+      await driver.typeText(
+        page,
+        request.params.text,
+        request.params.submitKey as KeyInput | undefined,
+      );
     });
     response.appendResponseLine(
       `Typed text "${request.params.text}${request.params.submitKey ? ` + ${request.params.submitKey}` : ''}"`,
@@ -365,16 +370,15 @@ export const drag = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     using fromHandle = await request.page.getElementByUid(
       request.params.from_uid,
     );
     using toHandle = await request.page.getElementByUid(request.params.to_uid);
+    const driver = context.getAutomationDriver();
 
     const result = await request.page.waitForEventsAfterAction(async () => {
-      await fromHandle.drag(toHandle);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await toHandle.drop(fromHandle);
+      await driver.drag(request.page, fromHandle, toHandle);
     });
     response.appendResponseLine(`Successfully dragged an element`);
     response.attachWaitForResult(result);
@@ -417,7 +421,7 @@ export const fillForm = definePageTool({
         await fillFormElement(
           element.uid,
           element.value,
-          context as McpContext,
+          context.getAutomationDriver(),
           page,
         );
       });
@@ -460,30 +464,14 @@ export const uploadFile = definePageTool({
       remote: false,
     },
   },
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const {uid, filePaths} = request.params;
-    using handle = (await request.page.getElementByUid(
-      uid,
-    )) as ElementHandle<HTMLInputElement>;
+    using handle = await request.page.getElementByUid(uid);
+    const driver = context.getAutomationDriver();
 
-    try {
-      await handle.uploadFile(...filePaths);
-    } catch {
-      // Some sites use a proxy element to trigger file upload instead of
-      // a type=file element. In this case, we want to default to
-      // Page.waitForFileChooser() and upload the file this way.
-      try {
-        const [fileChooser] = await Promise.all([
-          request.page.pptrPage.waitForFileChooser({timeout: 3000}),
-          handle.asLocator().click(),
-        ]);
-        await fileChooser.accept(filePaths);
-      } catch {
-        throw new Error(
-          `Failed to upload file. The element could not accept the file directly, and clicking it did not trigger a file chooser.`,
-        );
-      }
-    }
+    // The driver owns both the direct-input path and the file-chooser
+    // fallback for proxy elements.
+    await driver.uploadFile(request.page, handle, filePaths);
     if (request.params.includeSnapshot) {
       response.includeSnapshot();
     }
@@ -508,27 +496,14 @@ export const pressKey = definePageTool({
   },
   blockedByDialog: true,
   verifyFilesSchema: {},
-  handler: async (request, response) => {
+  handler: async (request, response, context) => {
     const page = request.page;
     const tokens = parseKey(request.params.key);
     const [key, ...modifiers] = tokens;
+    const driver = context.getAutomationDriver();
 
     const result = await page.waitForEventsAfterAction(async () => {
-      const heldModifiers: KeyInput[] = [];
-      try {
-        for (const modifier of modifiers) {
-          await page.pptrPage.keyboard.down(modifier);
-          heldModifiers.push(modifier);
-        }
-        await page.pptrPage.keyboard.press(key);
-      } finally {
-        // Release every modifier that was successfully pressed, even if a
-        // later key event throws. Otherwise a failed press leaves modifiers
-        // logically held down in the browser (see #2309).
-        for (const modifier of heldModifiers.toReversed()) {
-          await page.pptrPage.keyboard.up(modifier);
-        }
-      }
+      await driver.pressKey(page, key, modifiers);
     });
 
     response.appendResponseLine(
