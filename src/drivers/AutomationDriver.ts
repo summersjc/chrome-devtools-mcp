@@ -89,6 +89,17 @@ export interface AutomationDriver {
 /**
  * Minimal structural view of a WebdriverIO session. Kept local so the
  * "webdriverio" package is not a build-time dependency of the type graph.
+ *
+ * Verified structurally against webdriverio 9.32.0: all 20 members below exist
+ * with compatible names and arities. Three diverge, and all three are this
+ * view being deliberately narrower than the real types rather than a gap:
+ * - `waitForEnabled` really returns `Promise<true>`; callers await and discard.
+ * - `dragAndDrop` really accepts a full `Element`; we only ever pass one.
+ * - `$`'s real function selector is `(elem: HTMLElement) => HTMLElement`, so
+ *   the `Element` return here is wider than WDIO types allow for SVG/MathML.
+ * Re-check these if the webdriverio major version changes, since the mocks in
+ * tests/drivers/WdioDriver.test.ts are written against this view, not the
+ * package, and would not catch a drifted signature on their own.
  */
 export interface WdioElement {
   click(): Promise<void>;

@@ -1023,6 +1023,48 @@ If you hit VM-to-host port forwarding issues, see the “Remote debugging betwee
 
 For more details on remote debugging, see the [Chrome DevTools documentation](https://developer.chrome.com/docs/devtools/remote-debugging/).
 
+### WebdriverIO mode
+
+By default all actions are performed with Puppeteer. To route user-visible
+actions (click, fill, navigate, keyboard) through
+[WebdriverIO](https://webdriver.io) instead, install the optional dependency
+and start the server with `--automation-driver wdio`:
+
+```bash
+npm install webdriverio
+```
+
+```json
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--automation-driver",
+        "wdio"
+      ]
+    }
+  }
+}
+```
+
+Requirements and behavior:
+
+- The optional `webdriverio` dependency must be installed. It is declared as an
+  optional peer dependency, so it is **not** installed by default.
+- WebdriverIO attaches to the same Chrome instance the server controls, so all
+  diagnostics (traces, network, console, screenshots, emulation) keep working
+  and always use the Chrome DevTools Protocol.
+- Chrome is launched with a WebSocket debugging transport in this mode. When
+  connecting to a running Chrome via `--browser-url`, `--ws-endpoint`, or
+  `--auto-connect`, WDIO mode can also be enabled at runtime.
+- The [`select_automation_driver`](./docs/tool-reference.md#select_automation_driver)
+  tool switches between `puppeteer` and `wdio` at runtime.
+- **Elements inside iframes are not supported in WDIO mode.** Acting on one
+  returns an error asking you to switch back to the `puppeteer` driver.
+
 ### Debugging Chrome on Android
 
 Please consult [these instructions](./docs/debugging-android.md).
